@@ -13,35 +13,5 @@ const nextConfig: NextConfig = {
   },
 };
 
+// Export the config directly for Cloud Run compatibility
 export default nextConfig;
-
-// Use dynamic import for next-pwa to avoid type issues
-let withPWA: any;
-
-if (process.env.NODE_ENV === "production") {
-  withPWA = require("next-pwa")({
-    dest: "public",
-    disable: false,
-    register: true,
-    skipWaiting: true,
-    runtimeCaching: [
-      {
-        urlPattern: /^https?.*/,
-        handler: "NetworkFirst",
-        options: {
-          cacheName: "offlineCache",
-          expiration: {
-            maxEntries: 200,
-          },
-        },
-      },
-    ],
-    fallbacks: {
-      document: "/offline.html",
-    },
-  });
-
-  module.exports = withPWA(nextConfig);
-} else {
-  module.exports = nextConfig;
-}

@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Environment variables
+# Environment variables for build
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV NODE_ENV production
 
@@ -39,7 +39,7 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Copy output files
+# Copy built files
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -47,6 +47,7 @@ USER nextjs
 
 EXPOSE 3000
 
+# Use environment variable from Cloud Run for port
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
