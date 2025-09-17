@@ -7,7 +7,8 @@ const HARDWARE_API_KEY = process.env.HARDWARE_API_KEY || "dev-hardware-key";
 
 function authenticateHardware(request: NextRequest): string | null {
   const authHeader = request.headers.get("authorization");
-  const apiKey = request.headers.get("x-api-key");
+  const apiKey = request.headers.get("x-api-key"); // lowercase
+  const apiKeyUpper = request.headers.get("X-API-Key"); // uppercase for ESP32
 
   if (
     authHeader?.startsWith("Bearer ") &&
@@ -16,8 +17,9 @@ function authenticateHardware(request: NextRequest): string | null {
     return authHeader.split(" ")[1];
   }
 
-  if (apiKey === HARDWARE_API_KEY) {
-    return apiKey;
+  // Check both lowercase and uppercase API key headers
+  if (apiKey === HARDWARE_API_KEY || apiKeyUpper === HARDWARE_API_KEY) {
+    return apiKey || apiKeyUpper;
   }
 
   return null;

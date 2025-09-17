@@ -208,7 +208,8 @@ export default function QueuePage() {
               <h2 className="kiosk-text-xl">คิวที่รอ</h2>
               {queueData && (
                 <Badge variant="secondary" className="text-lg px-3 py-1">
-                  {queueData.queue.filter(q => q.queuePosition > 1).length} คิว
+                  {queueData.queue.filter((q) => q.queuePosition > 1).length}{" "}
+                  คิว
                 </Badge>
               )}
             </div>
@@ -222,60 +223,61 @@ export default function QueuePage() {
             <div className="space-y-3">
               <AnimatePresence>
                 {queueData?.queue
-                  .filter(queueItem => queueItem.queuePosition > 1) // Hide position 1 (they're in in-progress)
+                  .filter((queueItem) => queueItem.queuePosition > 1) // Hide position 1 (they're in in-progress)
                   .map((queueItem, index) => (
-                  <motion.div
-                    key={queueItem.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    transition={{ delay: index * 0.1 }}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      queueItem.id === currentUserOrder.id
-                        ? "border-primary bg-primary/5 shadow-md"
-                        : "border-gray-200 bg-white"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="text-2xl font-bold text-primary">
-                          #{queueItem.queuePosition}
-                        </div>
-                        <div>
-                          <p className="font-semibold">
-                            {queueItem.order.drinkName}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            คำสั่งที่: #{queueItem.id.slice(-8).toUpperCase()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <Badge className={getStatusColor(queueItem.status)}>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(queueItem.status)}
-                            {getStatusText(queueItem.status)}
+                    <motion.div
+                      key={queueItem.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ delay: index * 0.1 }}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        queueItem.id === currentUserOrder.id
+                          ? "border-primary bg-primary/5 shadow-md"
+                          : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="text-2xl font-bold text-primary">
+                            #{queueItem.queuePosition}
                           </div>
-                        </Badge>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          ~{queueItem.estimatedTime} นาที
-                        </p>
-                      </div>
-                    </div>
+                          <div>
+                            <p className="font-semibold">
+                              {queueItem.order.drinkName}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              คำสั่งที่: #{queueItem.id.slice(-8).toUpperCase()}
+                            </p>
+                          </div>
+                        </div>
 
-                    {queueItem.id === currentUserOrder.id && (
-                      <div className="mt-3 p-3 bg-primary/10 rounded-lg">
-                        <p className="text-sm font-medium text-primary">
-                          👆 นี่คือคำสั่งซื้อของคุณ
-                        </p>
+                        <div className="text-right">
+                          <Badge className={getStatusColor(queueItem.status)}>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(queueItem.status)}
+                              {getStatusText(queueItem.status)}
+                            </div>
+                          </Badge>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            ~{queueItem.estimatedTime} นาที
+                          </p>
+                        </div>
                       </div>
-                    )}
-                  </motion.div>
-                ))}
+
+                      {queueItem.id === currentUserOrder.id && (
+                        <div className="mt-3 p-3 bg-primary/10 rounded-lg">
+                          <p className="text-sm font-medium text-primary">
+                            👆 นี่คือคำสั่งซื้อของคุณ
+                          </p>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
               </AnimatePresence>
 
-              {queueData?.queue.filter(q => q.queuePosition > 1).length === 0 && (
+              {queueData?.queue.filter((q) => q.queuePosition > 1).length ===
+                0 && (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-4">✨</div>
                   <p className="text-lg text-muted-foreground">

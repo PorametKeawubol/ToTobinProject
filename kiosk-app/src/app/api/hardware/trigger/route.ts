@@ -1,5 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Hardware authentication middleware
+const HARDWARE_API_KEY = process.env.HARDWARE_API_KEY || "dev-hardware-key";
+
+function authenticateHardware(request: NextRequest): string | null {
+  const authHeader = request.headers.get("authorization");
+  const apiKey = request.headers.get("x-api-key"); // lowercase
+  const apiKeyUpper = request.headers.get("X-API-Key"); // uppercase for ESP32
+
+  if (
+    authHeader?.startsWith("Bearer ") &&
+    authHeader.split(" ")[1] === HARDWARE_API_KEY
+  ) {
+    return authHeader.split(" ")[1];
+  }
+
+  // Check both lowercase and uppercase API key headers
+  if (apiKey === HARDWARE_API_KEY || apiKeyUpper === HARDWARE_API_KEY) {
+    return apiKey || apiKeyUpper;
+  }
+
+  return null;
+}
+
 // Interface for ESP32 commands
 interface ESP32Command {
   id: string;
@@ -18,6 +41,11 @@ interface ESP32Command {
 const pendingCommands = new Map<string, ESP32Command[]>();
 
 export async function POST(request: NextRequest) {
+  const auth = authenticateHardware(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { hardwareId, action, orderId, ledPin, duration } = body;
@@ -68,6 +96,11 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = authenticateHardware(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const hardwareId = searchParams.get("hardwareId");

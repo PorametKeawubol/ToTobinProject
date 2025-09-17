@@ -48,9 +48,9 @@ export default function InProgressPage() {
     const isProcessing =
       currentUserOrder.status === "preparing" ||
       currentUserOrder.status === "brewing";
-    
-    const isFirstInQueue = 
-      currentUserOrder.status === "pending" && 
+
+    const isFirstInQueue =
+      currentUserOrder.status === "pending" &&
       currentUserOrder.queuePosition === 1;
 
     // Allow access if processing OR first in queue
@@ -206,8 +206,8 @@ export default function InProgressPage() {
             {/* Order Info */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold mb-2">
-                {isCompleted 
-                  ? "เสร็จแล้ว!" 
+                {isCompleted
+                  ? "เสร็จแล้ว!"
                   : currentUserOrder.status === "pending"
                   ? "รอเครื่องเริ่มทำ"
                   : "กำลังทำเครื่องดื่ม"}
@@ -217,16 +217,17 @@ export default function InProgressPage() {
               </div>
 
               {/* Queue Position Info */}
-              {currentUserOrder.status === "pending" && currentUserOrder.queuePosition === 1 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <div className="text-blue-800 font-medium">
-                    🎯 คำสั่งของคุณอยู่ลำดับที่ 1
+              {currentUserOrder.status === "pending" &&
+                currentUserOrder.queuePosition === 1 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="text-blue-800 font-medium">
+                      🎯 คำสั่งของคุณอยู่ลำดับที่ 1
+                    </div>
+                    <div className="text-blue-600 text-sm mt-1">
+                      เครื่องจะเริ่มทำเครื่องดื่มของคุณในไม่ช้า
+                    </div>
                   </div>
-                  <div className="text-blue-600 text-sm mt-1">
-                    เครื่องจะเริ่มทำเครื่องดื่มของคุณในไม่ช้า
-                  </div>
-                </div>
-              )}
+                )}
 
               <div className="flex items-center justify-center gap-4 mb-6">
                 <div className="text-5xl">🧋</div>
