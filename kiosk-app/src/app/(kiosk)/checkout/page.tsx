@@ -149,7 +149,7 @@ export default function CheckoutPage() {
 
       // Add to queue instead of immediate processing
       const queueOrder = await addToQueue({
-        id: order.id,
+        orderId: order.id,
         drinkName: currentItem?.drink.name || "เครื่องดื่ม",
         toppings: currentItem?.options.toppings?.map((t) => t.name) || [],
         totalAmount: order.amount,

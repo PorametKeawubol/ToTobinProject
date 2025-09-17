@@ -1,5 +1,16 @@
 import { OrderQueue, HardwareStatus, BrewingStep } from "./queue-schemas";
 
+// Input type for adding to queue
+interface AddToQueueData {
+  orderId: string;
+  sessionId?: string;
+  deviceId?: string;
+  drinkName: string;
+  toppings?: string[];
+  totalAmount: number;
+  size?: string;
+}
+
 // Mock Firestore for development
 // ใน production จะเปลี่ยนเป็น Firestore จริง
 class MockFirestore {
@@ -151,13 +162,13 @@ interface QueueStore {
   currentUserOrder: OrderQueue | null;
   isLoading: boolean;
 
-  addToQueue: (orderData: any) => Promise<OrderQueue>;
+  addToQueue: (orderData: AddToQueueData) => Promise<OrderQueue>;
   updateQueue: (queue: OrderQueue[]) => void;
   setCurrentUserOrder: (order: OrderQueue | null) => void;
   refreshQueue: () => Promise<void>;
 }
 
-export const useQueueStore = create<QueueStore>((set, get) => ({
+export const useQueueStore = create<QueueStore>((set) => ({
   queue: [],
   currentUserOrder: null,
   isLoading: false,
@@ -166,11 +177,12 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ isLoading: true });
 
     const queueOrder = await queueService.addToQueue({
-      orderId: orderData.id,
+      orderId: orderData.orderId,
       status: "pending",
       createdAt: new Date(),
       customer: {
         sessionId: orderData.sessionId || "anonymous",
+        deviceId: orderData.deviceId,
       },
       order: {
         drinkName: orderData.drinkName,

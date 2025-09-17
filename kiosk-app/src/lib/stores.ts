@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Drink, Topping, OrderOptions, Order } from "@/lib/schemas";
+import type { Drink, OrderOptions, Order } from "@/lib/schemas";
 
 // Single item store for kiosk ordering (no cart/multiple items)
 interface CurrentItemStore {

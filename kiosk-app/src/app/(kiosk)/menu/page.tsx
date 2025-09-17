@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,11 +11,10 @@ import { useCartStore } from "@/lib/stores";
 import {
   SAMPLE_DRINKS,
   SAMPLE_TOPPINGS,
-  SIZE_MULTIPLIERS,
 } from "@/lib/schemas";
 import type { Drink, Topping, OrderOptions } from "@/lib/schemas";
 
-export default function MenuPage() {
+function MenuContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const campaign = searchParams.get("utm_campaign");
@@ -27,7 +26,7 @@ export default function MenuPage() {
     toppings: [],
   });
 
-  const { setCurrentItem, clearCart } = useCartStore();
+  const { setCurrentItem } = useCartStore();
 
   const calculatePrice = (drink: Drink, options: OrderOptions) => {
     // Use base price without size multiplier since we have one size
@@ -272,5 +271,13 @@ export default function MenuPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <MenuContent />
+    </Suspense>
   );
 }
