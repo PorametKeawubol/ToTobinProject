@@ -1,0 +1,17 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'asia-southeast1-docker.pkg.dev/$PROJECT_ID/totobin-kiosk/totobin-kiosk', '.']
+  
+  # Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-southeast1-docker.pkg.dev/$PROJECT_ID/totobin-kiosk/totobin-kiosk']
+
+# Store the image in Artifact Registry
+images: ['asia-southeast1-docker.pkg.dev/$PROJECT_ID/totobin-kiosk/totobin-kiosk']
+
+# Build configuration
+timeout: '1200s'
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

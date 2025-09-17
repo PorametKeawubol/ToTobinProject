@@ -1,13 +1,19 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   experimental: {
-    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+    serverComponentsExternalPackages: ["@google-cloud/firestore"],
   },
-  images: {
-    domains: ["localhost"],
+  env: {
+    GOOGLE_CLOUD_PROJECT_ID: process.env.GOOGLE_CLOUD_PROJECT_ID,
+    GOOGLE_CLOUD_REGION: process.env.GOOGLE_CLOUD_REGION,
+    HARDWARE_API_KEY: process.env.HARDWARE_API_KEY,
+    JWT_SECRET: process.env.JWT_SECRET,
   },
 };
+
+export default nextConfig;
 
 // Use dynamic import for next-pwa to avoid type issues
 let withPWA: any;

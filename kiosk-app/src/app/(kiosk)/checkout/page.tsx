@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Clock, X, CheckCircle } from "lucide-react";
+import { ArrowLeft, Clock, X, CheckCircle, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCartStore, useOrderStore, useKioskStore } from "@/lib/stores";
-import { SAMPLE_DRINKS, SAMPLE_TOPPINGS } from "@/lib/schemas";
+import { useQueueStore } from "@/lib/queue-service";
+import { SAMPLE_DRINKS } from "@/lib/schemas";
 import type { Order } from "@/lib/schemas";
 
 export default function CheckoutPage() {
@@ -16,6 +17,7 @@ export default function CheckoutPage() {
   const { currentItem, clearCart } = useCartStore();
   const { setCurrentOrder } = useOrderStore();
   const { setLocked } = useKioskStore();
+  const { addToQueue, currentUserOrder } = useQueueStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -143,26 +145,24 @@ export default function CheckoutPage() {
     if (!order) return;
 
     try {
-      // Lock the kiosk
-      await fetch("/api/orders/lock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id }),
+      console.log("Payment success - Adding to queue:", order);
+
+      // Add to queue instead of immediate processing
+      const queueOrder = await addToQueue({
+        id: order.id,
+        drinkName: currentItem?.drink.name || "เครื่องดื่ม",
+        toppings: currentItem?.options.toppings?.map((t) => t.name) || [],
+        totalAmount: order.amount,
+        sessionId: Date.now().toString(),
       });
 
-      setLocked(true, order.id);
+      console.log("Added to queue:", queueOrder);
 
-      // Start device
-      await fetch("/api/device/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id }),
-      });
-
-      router.push("/in-progress");
+      // Redirect to queue status page
+      router.push("/queue");
     } catch (error) {
-      console.error("Error processing payment:", error);
-      setError("เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน");
+      console.error("Error adding to queue:", error);
+      setError("เกิดข้อผิดพลาดในการเพิ่มคำสั่งลงคิว");
     }
   };
 
