@@ -48,8 +48,13 @@ export default function InProgressPage() {
     const isProcessing =
       currentUserOrder.status === "preparing" ||
       currentUserOrder.status === "brewing";
+    
+    const isFirstInQueue = 
+      currentUserOrder.status === "pending" && 
+      currentUserOrder.queuePosition === 1;
 
-    if (!isProcessing) {
+    // Allow access if processing OR first in queue
+    if (!isProcessing && !isFirstInQueue) {
       router.push("/queue");
       return;
     }
@@ -201,11 +206,27 @@ export default function InProgressPage() {
             {/* Order Info */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold mb-2">
-                {isCompleted ? "เสร็จแล้ว!" : "กำลังทำเครื่องดื่ม"}
+                {isCompleted 
+                  ? "เสร็จแล้ว!" 
+                  : currentUserOrder.status === "pending"
+                  ? "รอเครื่องเริ่มทำ"
+                  : "กำลังทำเครื่องดื่ม"}
               </h1>
               <div className="text-xl text-muted-foreground mb-4">
                 คำสั่งที่: {currentUserOrder.id.slice(-8).toUpperCase()}
               </div>
+
+              {/* Queue Position Info */}
+              {currentUserOrder.status === "pending" && currentUserOrder.queuePosition === 1 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="text-blue-800 font-medium">
+                    🎯 คำสั่งของคุณอยู่ลำดับที่ 1
+                  </div>
+                  <div className="text-blue-600 text-sm mt-1">
+                    เครื่องจะเริ่มทำเครื่องดื่มของคุณในไม่ช้า
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-center gap-4 mb-6">
                 <div className="text-5xl">🧋</div>
@@ -245,7 +266,21 @@ export default function InProgressPage() {
             {/* LED Status Display */}
             {!isCompleted && (
               <div className="mb-8">
-                <LEDStatusDisplay orderId={currentUserOrder.orderId} />
+                {currentUserOrder.status === "pending" ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                    <div className="text-center">
+                      <div className="text-4xl mb-3">⏳</div>
+                      <h3 className="font-semibold text-yellow-800 mb-2">
+                        กำลังรอเครื่องทำ
+                      </h3>
+                      <p className="text-yellow-700">
+                        เครื่องจะเริ่มทำเครื่องดื่มของคุณในไม่ช้า
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <LEDStatusDisplay orderId={currentUserOrder.orderId} />
+                )}
               </div>
             )}
 

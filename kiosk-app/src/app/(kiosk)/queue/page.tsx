@@ -205,10 +205,10 @@ export default function QueuePage() {
           <Card className="kiosk-card">
             <div className="flex items-center gap-3 mb-6">
               <Users className="w-6 h-6 text-primary" />
-              <h2 className="kiosk-text-xl">คิวทั้งหมด</h2>
+              <h2 className="kiosk-text-xl">คิวที่รอ</h2>
               {queueData && (
                 <Badge variant="secondary" className="text-lg px-3 py-1">
-                  {queueData.totalInQueue} คิว
+                  {queueData.queue.filter(q => q.queuePosition > 1).length} คิว
                 </Badge>
               )}
             </div>
@@ -221,7 +221,9 @@ export default function QueuePage() {
 
             <div className="space-y-3">
               <AnimatePresence>
-                {queueData?.queue.map((queueItem, index) => (
+                {queueData?.queue
+                  .filter(queueItem => queueItem.queuePosition > 1) // Hide position 1 (they're in in-progress)
+                  .map((queueItem, index) => (
                   <motion.div
                     key={queueItem.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -273,11 +275,14 @@ export default function QueuePage() {
                 ))}
               </AnimatePresence>
 
-              {queueData?.queue.length === 0 && (
+              {queueData?.queue.filter(q => q.queuePosition > 1).length === 0 && (
                 <div className="text-center py-8">
-                  <div className="text-4xl mb-4">🎉</div>
+                  <div className="text-4xl mb-4">✨</div>
                   <p className="text-lg text-muted-foreground">
-                    ไม่มีคิวในขณะนี้
+                    ไม่มีคิวรออื่น ๆ
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    คิวของคุณกำลังถูกดำเนินการ
                   </p>
                 </div>
               )}

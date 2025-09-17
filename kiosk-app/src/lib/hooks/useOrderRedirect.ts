@@ -21,8 +21,12 @@ export function useOrderRedirect() {
       currentUserOrder.status === "preparing" ||
       currentUserOrder.status === "brewing";
 
-    // If this user's order is being processed, redirect to in-progress
-    if (isCurrentOrderBeingProcessed) {
+    // Check if this is the first in queue (position 1) or being processed
+    const isFirstInQueue = currentUserOrder.queuePosition === 1;
+    
+    // If this user's order is being processed OR is first in queue, go to in-progress
+    if (isCurrentOrderBeingProcessed || (isFirstInQueue && currentUserOrder.status === "pending")) {
+      console.log(`Redirecting to in-progress: status=${currentUserOrder.status}, position=${currentUserOrder.queuePosition}`);
       router.push("/in-progress");
       return;
     }
@@ -32,14 +36,18 @@ export function useOrderRedirect() {
       router.push("/done");
       return;
     }
+
+    // Otherwise, stay in queue page
+    console.log(`Staying in queue: status=${currentUserOrder.status}, position=${currentUserOrder.queuePosition}`);
   }, [currentUserOrder, router]);
 
   return {
     currentUserOrder,
-    shouldShowQueue: currentUserOrder?.status === "pending",
+    shouldShowQueue: currentUserOrder?.status === "pending" && currentUserOrder?.queuePosition > 1,
     shouldShowInProgress:
       currentUserOrder?.status === "preparing" ||
-      currentUserOrder?.status === "brewing",
+      currentUserOrder?.status === "brewing" ||
+      (currentUserOrder?.status === "pending" && currentUserOrder?.queuePosition === 1),
     shouldShowDone: currentUserOrder?.status === "completed",
   };
 }

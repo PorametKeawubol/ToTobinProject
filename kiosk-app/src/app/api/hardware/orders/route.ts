@@ -34,13 +34,16 @@ export async function GET(request: NextRequest) {
     request.nextUrl.searchParams.get("hardwareId") || "esp32-001";
 
   try {
+    // Update heartbeat first
+    await queueService.updateHardwareStatus(hardwareId, "idle");
+
     // Get next pending order
     const nextOrder = await queueService.getNextOrder();
 
     if (nextOrder) {
       // Mark as preparing and assign to hardware
       await queueService.updateOrderStatus(
-        nextOrder.id,
+        nextOrder.orderId, // Use orderId instead of id
         "preparing",
         hardwareId
       );
@@ -53,19 +56,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         order: {
-          id: nextOrder.id,
+          id: nextOrder.orderId, // Use orderId consistently
           orderId: nextOrder.orderId,
           drinkName: nextOrder.order.drinkName,
           toppings: nextOrder.order.toppings,
           size: nextOrder.order.size,
           queuePosition: nextOrder.queuePosition,
         },
+        message: "New order assigned to hardware",
       });
     }
 
-    // No orders - update hardware to idle
-    await queueService.updateHardwareStatus(hardwareId, "idle");
-
+    // No orders - hardware stays idle
     return NextResponse.json({
       success: true,
       order: null,
