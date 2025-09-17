@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,19 +16,28 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useQueueStore } from "@/lib/queue-service";
 import { useRealTimeQueue, useOrderStatus } from "@/lib/hooks/useRealTimeQueue";
+import { useOrderRedirect } from "@/lib/hooks/useOrderRedirect";
 
 export default function QueuePage() {
   const router = useRouter();
   const { currentUserOrder } = useQueueStore();
   const { queueData, isConnected, error } = useRealTimeQueue();
   const orderStatus = useOrderStatus(currentUserOrder?.id || null);
+  const { shouldShowQueue, shouldShowInProgress } = useOrderRedirect();
 
+  // Redirect logic based on order status
   useEffect(() => {
     if (!currentUserOrder) {
       router.push("/");
       return;
     }
-  }, [currentUserOrder, router]);
+
+    // If user's order is being processed, redirect to in-progress page
+    if (shouldShowInProgress) {
+      router.push("/in-progress");
+      return;
+    }
+  }, [currentUserOrder, shouldShowInProgress, router]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

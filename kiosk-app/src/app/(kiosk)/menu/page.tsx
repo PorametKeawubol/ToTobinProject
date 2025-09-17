@@ -8,10 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, Minus, Coffee } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCartStore } from "@/lib/stores";
-import {
-  SAMPLE_DRINKS,
-  SAMPLE_TOPPINGS,
-} from "@/lib/schemas";
+import { SAMPLE_DRINKS, SAMPLE_TOPPINGS } from "@/lib/schemas";
 import type { Drink, Topping, OrderOptions } from "@/lib/schemas";
 
 function MenuContent() {

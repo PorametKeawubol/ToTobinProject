@@ -6,15 +6,16 @@
 const char *ssid = "YOUR_WIFI_SSID";
 const char *password = "YOUR_WIFI_PASSWORD";
 
-// API Configuration
+// API Configuration  
 const char *baseURL = "https://porametix.online/api";
 const char *hardwareAPIKey = "dev-hardware-key";
 const char *hardwareId = "esp32-001";
 
 // Hardware pins (adjust based on your setup)
-const int LED_PIN = 2;
-const int PUMP_PIN = 4;
-const int VALVE_PIN = 5;
+const int LED_STATUS = 2;         // Status LED (onboard)
+const int LED_COMPLETION = 4;     // Completion signal LED
+const int PUMP_PIN = 5;
+const int VALVE_PIN = 18;
 const int SENSOR_PIN = 34;
 
 // State variables
@@ -22,21 +23,25 @@ String currentOrderId = "";
 bool isBrewing = false;
 unsigned long lastPollTime = 0;
 unsigned long lastHeartbeat = 0;
+unsigned long lastCommandCheck = 0;
 const unsigned long POLL_INTERVAL = 5000;       // 5 seconds
 const unsigned long HEARTBEAT_INTERVAL = 30000; // 30 seconds
+const unsigned long COMMAND_CHECK_INTERVAL = 2000; // 2 seconds
 
 void setup()
 {
  Serial.begin(115200);
 
  // Initialize pins
- pinMode(LED_PIN, OUTPUT);
+ pinMode(LED_STATUS, OUTPUT);
+ pinMode(LED_COMPLETION, OUTPUT);
  pinMode(PUMP_PIN, OUTPUT);
  pinMode(VALVE_PIN, OUTPUT);
  pinMode(SENSOR_PIN, INPUT);
 
  // Turn off all outputs
- digitalWrite(LED_PIN, LOW);
+ digitalWrite(LED_STATUS, LOW);
+ digitalWrite(LED_COMPLETION, LOW);
  digitalWrite(PUMP_PIN, LOW);
  digitalWrite(VALVE_PIN, LOW);
 
@@ -64,6 +69,13 @@ void loop()
  {
   sendHeartbeat();
   lastHeartbeat = currentTime;
+ }
+
+ // Check for commands from API
+ if (currentTime - lastCommandCheck >= COMMAND_CHECK_INTERVAL)
+ {
+  checkForCommands();
+  lastCommandCheck = currentTime;
  }
 
  // Poll for orders if not brewing
@@ -136,7 +148,7 @@ void startBrewing()
   return;
 
  isBrewing = true;
- digitalWrite(LED_PIN, HIGH); // Indicator LED
+ digitalWrite(LED_STATUS, HIGH); // Indicator LED
 
  Serial.println("Starting brewing process for order: " + currentOrderId);
 
@@ -168,16 +180,10 @@ void startBrewing()
  // Reset state
  currentOrderId = "";
  isBrewing = false;
- digitalWrite(LED_PIN, LOW);
+ digitalWrite(LED_STATUS, LOW);
 
- // Blink LED to indicate completion
- for (int i = 0; i < 5; i++)
- {
-  digitalWrite(LED_PIN, HIGH);
-  delay(200);
-  digitalWrite(LED_PIN, LOW);
-  delay(200);
- }
+ // Auto-trigger completion signal
+ triggerCompletionSignal();
 }
 
 void updateStatus(String status, String step, String message)
@@ -233,4 +239,93 @@ void sendHeartbeat()
  }
 
  http.end();
+}
+
+// Check for commands from API
+void checkForCommands()
+{
+ HTTPClient http;
+ String url = String(baseURL) + "/hardware/trigger?hardwareId=" + hardwareId;
+
+ http.begin(url);
+ http.addHeader("X-API-Key", hardwareAPIKey);
+
+ int httpCode = http.GET();
+
+ if (httpCode == 200)
+ {
+  String payload = http.getString();
+  DynamicJsonDocument doc(1024);
+  deserializeJson(doc, payload);
+
+  if (doc["success"] && !doc["command"].isNull())
+  {
+   // Execute command
+   String action = doc["command"]["action"];
+   String commandId = doc["command"]["id"];
+   
+   Serial.println("Received command: " + action + " (ID: " + commandId + ")");
+   
+   if (action == "completion_signal")
+   {
+    int ledPin = doc["command"]["params"]["ledPin"] | LED_COMPLETION;
+    int duration = doc["command"]["params"]["duration"] | 3000;
+    
+    executeCompletionSignal(ledPin, duration);
+   }
+   else if (action == "test_led")
+   {
+    testLED();
+   }
+  }
+ }
+
+ http.end();
+}
+
+// Execute completion signal
+void executeCompletionSignal(int ledPin, int duration)
+{
+ Serial.println("Executing completion signal on pin " + String(ledPin) + " for " + String(duration) + "ms");
+ 
+ // Blink pattern for completion
+ unsigned long startTime = millis();
+ while (millis() - startTime < duration)
+ {
+  digitalWrite(ledPin, HIGH);
+  delay(200);
+  digitalWrite(ledPin, LOW);
+  delay(200);
+ }
+ 
+ Serial.println("Completion signal finished");
+}
+
+// Auto-trigger completion signal (internal)
+void triggerCompletionSignal()
+{
+ executeCompletionSignal(LED_COMPLETION, 3000);
+}
+
+// Test LED function
+void testLED()
+{
+ Serial.println("Testing LEDs...");
+ 
+ // Test status LED
+ digitalWrite(LED_STATUS, HIGH);
+ delay(500);
+ digitalWrite(LED_STATUS, LOW);
+ delay(500);
+ 
+ // Test completion LED
+ for (int i = 0; i < 3; i++)
+ {
+  digitalWrite(LED_COMPLETION, HIGH);
+  delay(300);
+  digitalWrite(LED_COMPLETION, LOW);
+  delay(300);
+ }
+ 
+ Serial.println("LED test completed");
 }
