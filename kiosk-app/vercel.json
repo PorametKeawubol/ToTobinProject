@@ -1,45 +1,40 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "outputDirectory": ".next",
-  "env": {
-    "NODE_ENV": "production",
-    "HARDWARE_API_KEY": "@hardware-api-key",
-    "PROMPTPAY_PHONE": "@promptpay-phone",
-    "BUSINESS_NAME": "@business-name",
-    "ENABLE_HARDWARE_INTEGRATION": "@enable-hardware-integration",
-    "ENABLE_QUEUE_SYSTEM": "@enable-queue-system"
-  },
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
+ "framework": "nextjs",
+ "buildCommand": "npm run build",
+ "devCommand": "npm run dev",
+ "installCommand": "npm install",
+ "outputDirectory": ".next",
+ "env": {
+  "NODE_ENV": "production"
+ },
+ "functions": {
+  "src/app/api/**/*.ts": {
+   "maxDuration": 30
+  }
+ },
+ "rewrites": [
+  {
+   "source": "/api/(.*)",
+   "destination": "/api/$1"
+  }
+ ],
+ "headers": [
+  {
+   "source": "/api/(.*)",
+   "headers": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    }
-  ],
-  "headers": [
+     "key": "Access-Control-Allow-Origin",
+     "value": "*"
+    },
     {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
-      ]
+     "key": "Access-Control-Allow-Methods",
+     "value": "GET, POST, PUT, DELETE, OPTIONS"
+    },
+    {
+     "key": "Access-Control-Allow-Headers",
+     "value": "Content-Type, Authorization"
     }
-  ]
+   ]
+  }
+ ]
 }
