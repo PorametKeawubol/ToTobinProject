@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ออฟไลน์ - TotoBin Kiosk</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #fbfcfb 0%, #f0fdf4 100%);
+            margin: 0;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #14532d;
+        }
+        .container {
+            text-align: center;
+            max-width: 600px;
+            background: white;
+            padding: 3rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #22c55e;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            color: #6b7280;
+        }
+        .retry-btn {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .retry-btn:hover {
+            background: #16a34a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🐢</div>
+        <h1>ไม่มีการเชื่อมต่ออินเทอร์เน็ต</h1>
+        <p>
+            ขออภัย ตู้เต่าบินต้องการการเชื่อมต่ออินเทอร์เน็ตเพื่อทำงาน<br>
+            กรุณาตรวจสอบการเชื่อมต่อและลองใหม่อีกครั้ง
+        </p>
+        <button class="retry-btn" onclick="window.location.reload()">
+            ลองอีกครั้ง
+        </button>
+    </div>
+</body>
+</html>
