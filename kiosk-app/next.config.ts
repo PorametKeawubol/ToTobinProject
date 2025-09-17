@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Remove standalone for Vercel deployment
   experimental: {
     serverComponentsExternalPackages: ["@google-cloud/firestore"],
   },
@@ -10,8 +10,9 @@ const nextConfig: NextConfig = {
     GOOGLE_CLOUD_REGION: process.env.GOOGLE_CLOUD_REGION,
     HARDWARE_API_KEY: process.env.HARDWARE_API_KEY,
     JWT_SECRET: process.env.JWT_SECRET,
+    PROMPTPAY_PHONE: process.env.PROMPTPAY_PHONE,
+    BUSINESS_NAME: process.env.BUSINESS_NAME,
   },
 };
 
-// Export the config directly for Cloud Run compatibility
 export default nextConfig;
