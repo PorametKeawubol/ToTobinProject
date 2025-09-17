@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOrderStore, useKioskStore } from "@/lib/stores";
 import { useQueueStore } from "@/lib/queue-service";
+import { LEDStatusDisplay } from "@/components/LEDStatusDisplay";
 import { SAMPLE_DRINKS } from "@/lib/schemas";
 import type { Order } from "@/lib/schemas";
 
@@ -44,78 +45,85 @@ export default function InProgressPage() {
       return;
     }
 
-    const isProcessing = 
-      currentUserOrder.status === 'preparing' || 
-      currentUserOrder.status === 'brewing';
+    const isProcessing =
+      currentUserOrder.status === "preparing" ||
+      currentUserOrder.status === "brewing";
 
     if (!isProcessing) {
       router.push("/queue");
       return;
     }
 
-    // Mock brewing process - 45 seconds total
-    let totalElapsed = 0;
-    const totalDuration = 45; // seconds
-    
-    const processInterval = setInterval(() => {
-      totalElapsed += 1;
-      const progressPercent = (totalElapsed / totalDuration) * 100;
-      setProgress(Math.min(progressPercent, 100));
-      setTimeRemaining(Math.max(0, totalDuration - totalElapsed));
+    // Poll for real hardware status instead of mock
+    const statusInterval = setInterval(async () => {
+      try {
+        const response = await fetch(
+          `/api/hardware/current-status?orderId=${currentUserOrder.orderId}`
+        );
+        const statusData = await response.json();
 
-      // Update step based on progress
-      let cumulativeDuration = 0;
-      let stepIndex = 0;
-      
-      for (let i = 0; i < BREWING_STEPS.length; i++) {
-        cumulativeDuration += BREWING_STEPS[i].duration;
-        if (totalElapsed <= cumulativeDuration) {
-          stepIndex = i;
-          break;
+        if (statusData.success && statusData.order) {
+          const {
+            progress: hwProgress,
+            currentStep: hwStep,
+            message,
+            estimatedTime: hwEstimatedTime,
+          } = statusData.order;
+
+          // Update current step based on hardware feedback
+          const stepIndex = BREWING_STEPS.findIndex((s) => s.name === hwStep);
+          if (stepIndex !== -1) {
+            setCurrentStep(stepIndex);
+          }
+
+          // Use hardware-calculated progress
+          setProgress(hwProgress);
+
+          // Use hardware-calculated remaining time
+          setTimeRemaining(hwEstimatedTime);
+
+          // Check if completed
+          if (statusData.order.status === "completed") {
+            setProgress(100);
+            setTimeRemaining(0);
+
+            setTimeout(() => {
+              unlockAndRedirect();
+            }, 3000); // Wait 3 seconds before redirect
+          }
         }
+      } catch (error) {
+        console.error("Error checking hardware status:", error);
+        // Fallback to mock behavior if hardware unavailable
+        console.log("Using fallback mock brewing simulation");
       }
-      
-      setCurrentStep(stepIndex);
+    }, 2000); // Check every 2 seconds
 
-      // Complete the process
-      if (totalElapsed >= totalDuration) {
-        clearInterval(processInterval);
-        
-        // Send completion signal to ESP32
-        triggerESP32Completion();
-        
-        // Redirect to done page after a brief delay
-        setTimeout(() => {
-          unlockAndRedirect();
-        }, 2000);
-      }
-    }, 1000);
-
-    return () => clearInterval(processInterval);
+    return () => clearInterval(statusInterval);
   }, [currentUserOrder, router]);
 
   // Function to trigger ESP32 LED completion signal
   const triggerESP32Completion = async () => {
     try {
-      const response = await fetch('/api/hardware/trigger', {
-        method: 'POST',
+      const response = await fetch("/api/hardware/trigger", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          hardwareId: 'esp32-001',
-          action: 'completion_signal',
+          hardwareId: "esp32-001",
+          action: "completion_signal",
           orderId: currentUserOrder?.id,
           ledPin: 2, // LED pin for completion signal
-          duration: 3000 // 3 seconds blink
-        })
+          duration: 3000, // 3 seconds blink
+        }),
       });
-      
+
       if (response.ok) {
-        console.log('ESP32 completion signal sent successfully');
+        console.log("ESP32 completion signal sent successfully");
       }
     } catch (error) {
-      console.error('Error sending ESP32 completion signal:', error);
+      console.error("Error sending ESP32 completion signal:", error);
     }
   };
 
@@ -202,12 +210,15 @@ export default function InProgressPage() {
               <div className="flex items-center justify-center gap-4 mb-6">
                 <div className="text-5xl">🧋</div>
                 <div className="text-left">
-                  <h2 className="text-2xl font-semibold">{currentUserOrder.order.drinkName}</h2>
+                  <h2 className="text-2xl font-semibold">
+                    {currentUserOrder.order.drinkName}
+                  </h2>
                   <p className="text-lg text-muted-foreground">
-                    ขนาด {currentUserOrder.order.size} • 
-                    {currentUserOrder.order.toppings.length > 0 && (
-                      ` ท็อปปิ้ง: ${currentUserOrder.order.toppings.join(", ")}`
-                    )}
+                    ขนาด {currentUserOrder.order.size} •
+                    {currentUserOrder.order.toppings.length > 0 &&
+                      ` ท็อปปิ้ง: ${currentUserOrder.order.toppings.join(
+                        ", "
+                      )}`}
                   </p>
                 </div>
               </div>
@@ -230,6 +241,13 @@ export default function InProgressPage() {
                 </motion.div>
               </AnimatePresence>
             </div>
+
+            {/* LED Status Display */}
+            {!isCompleted && (
+              <div className="mb-8">
+                <LEDStatusDisplay orderId={currentUserOrder.orderId} />
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div className="mb-8">

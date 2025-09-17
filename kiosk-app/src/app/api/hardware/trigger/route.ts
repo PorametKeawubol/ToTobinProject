@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (!pendingCommands.has(hardwareId)) {
       pendingCommands.set(hardwareId, []);
     }
-    
+
     const commands = pendingCommands.get(hardwareId)!;
     commands.push(command);
 
@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
       message: "Command queued for ESP32",
       commandId: command.id,
     });
-
   } catch (error) {
     console.error("Error processing ESP32 trigger:", error);
     return NextResponse.json(
@@ -82,12 +81,12 @@ export async function GET(request: NextRequest) {
 
     // Get pending commands for this ESP32
     const commands = pendingCommands.get(hardwareId) || [];
-    const pendingCommand = commands.find(cmd => cmd.status === "pending");
+    const pendingCommand = commands.find((cmd) => cmd.status === "pending");
 
     if (pendingCommand) {
       // Mark as sent
       pendingCommand.status = "sent";
-      
+
       return NextResponse.json({
         success: true,
         command: pendingCommand,
@@ -98,7 +97,6 @@ export async function GET(request: NextRequest) {
       success: true,
       command: null,
     });
-
   } catch (error) {
     console.error("Error fetching ESP32 commands:", error);
     return NextResponse.json(

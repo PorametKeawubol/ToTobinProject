@@ -26,7 +26,7 @@ function authenticateHardware(request: NextRequest): string | null {
 // Status update schema
 const StatusUpdateSchema = z.object({
   orderId: z.string(),
-  status: z.enum(["preparing", "brewing", "completed"]),
+  status: z.enum(["pending", "preparing", "brewing", "completed", "cancelled"]),
   step: z
     .enum([
       "preparing_cup",
@@ -36,9 +36,21 @@ const StatusUpdateSchema = z.object({
       "completed",
     ])
     .optional(),
+  ledState: z
+    .object({
+      preparing: z.boolean(),
+      toppings: z.boolean(),
+      ice: z.boolean(),
+      brewing: z.boolean(),
+      completed: z.boolean(),
+    })
+    .optional(),
+  progress: z.number().min(0).max(100).optional(),
   message: z.string().optional(),
   hardwareId: z.string(),
   error: z.boolean().optional(),
+  elapsedTime: z.number().optional(),
+  totalTime: z.number().optional(),
 });
 
 // POST /api/hardware/status - Update order status
@@ -71,10 +83,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update hardware status
+    // Update hardware status based on order status
     if (updateData.status === "completed") {
       await queueService.updateHardwareStatus(updateData.hardwareId, "idle");
-    } else {
+    } else if (
+      updateData.status === "preparing" ||
+      updateData.status === "brewing"
+    ) {
       await queueService.updateHardwareStatus(
         updateData.hardwareId,
         "busy",
@@ -82,14 +97,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(
-      `Hardware ${updateData.hardwareId} updated order ${updateData.orderId} to ${updateData.status}`
-    );
-
-    return NextResponse.json({
+    // Store LED state and progress information for web display
+    const statusResponse = {
       success: true,
       message: "Status updated successfully",
-    });
+      hardwareStatus: {
+        orderId: updateData.orderId,
+        status: updateData.status,
+        step: updateData.step,
+        ledState: updateData.ledState,
+        progress: updateData.progress,
+        elapsedTime: updateData.elapsedTime,
+        totalTime: updateData.totalTime,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    console.log(
+      `Hardware ${updateData.hardwareId} updated order ${updateData.orderId}:`,
+      {
+        status: updateData.status,
+        step: updateData.step,
+        ledState: updateData.ledState,
+        progress: updateData.progress,
+      }
+    );
+
+    return NextResponse.json(statusResponse);
   } catch (error) {
     console.error("Hardware status update error:", error);
     return NextResponse.json(
@@ -111,6 +145,7 @@ export async function GET(request: NextRequest) {
 
   const hardwareId =
     request.nextUrl.searchParams.get("hardwareId") || "esp32-001";
+  const orderId = request.nextUrl.searchParams.get("orderId");
 
   try {
     // Send heartbeat
@@ -118,11 +153,44 @@ export async function GET(request: NextRequest) {
 
     const queue = await queueService.getQueueStatus();
 
+    // If orderId is specified, get specific order status
+    if (orderId) {
+      const order = queue.find((o) => o.orderId === orderId);
+      if (order) {
+        return NextResponse.json({
+          success: true,
+          order: {
+            orderId: order.orderId,
+            status: order.status,
+            queuePosition: order.queuePosition,
+            estimatedTime: order.estimatedTime,
+            startedAt: order.startedAt,
+            completedAt: order.completedAt,
+          },
+          hardwareId,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Order not found",
+            orderId,
+          },
+          { status: 404 }
+        );
+      }
+    }
+
+    // General hardware status
     return NextResponse.json({
       success: true,
       hardwareId,
       queueLength: queue.length,
       estimatedWaitTime: queue.length * 3, // 3 minutes per order
+      currentOrders: queue.filter(
+        (o) => o.status === "preparing" || o.status === "brewing"
+      ),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
