@@ -67,14 +67,17 @@ NODE_OPTIONS=--max-old-space-size=1024
 EOF
 
 # Use optimized config if available
-if [ -f "next.config.odroid.ts" ]; then
+if [ -f "next.config.odroid.js" ]; then
+    cp next.config.odroid.js next.config.js
+    print_status "Using ODROID optimized config (JS version)"
+elif [ -f "next.config.odroid.ts" ]; then
     cp next.config.odroid.ts next.config.ts
-    print_status "Using ODROID optimized config"
+    print_status "Using ODROID optimized config (TS version)"
 fi
 
-# Install and build
+# Install dependencies including dev dependencies for build
 print_status "Installing dependencies..."
-NODE_ENV=production npm ci --only=production
+npm install
 
 print_status "Building application..."
 NODE_OPTIONS="--max-old-space-size=1024" npm run build
