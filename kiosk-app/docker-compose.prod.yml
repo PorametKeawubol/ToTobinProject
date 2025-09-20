@@ -56,7 +56,7 @@ services:
       - certbot-etc:/etc/letsencrypt
       - certbot-var:/var/lib/letsencrypt
       - ./nginx/www:/var/www/html
-    command: certonly --webroot --webroot-path=/var/www/html --email your-email@example.com --agree-tos --no-eff-email --force-renewal -d porametix.online
+    command: certonly --webroot --webroot-path=/var/www/html --email poramet.contact@gmail.com --agree-tos --no-eff-email --force-renewal -d porametix.online
     depends_on:
       - nginx
 
