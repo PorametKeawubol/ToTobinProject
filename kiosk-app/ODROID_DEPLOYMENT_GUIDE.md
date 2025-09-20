@@ -1,266 +1,269 @@
-# ODROID C4 Deployment Guide
+# TotoBin Kiosk - ODROID C4 Deployment Guide
 
-## 🚀 Complete Next.js Deployment on ODROID C4
+## 🚀 Quick Deployment
+
+Deploy TotoBin Kiosk on ODROID C4 with domain `porametix.online` using yarn for better ARM performance.
 
 ### Prerequisites
-- ODROID C4 with Ubuntu 20.04+ 
+- ODROID C4 with Ubuntu 20.04+ or Debian 11+
+- Root access
 - Internet connection
-- Domain `porametix.online` pointing to your ODROID's IP
-- At least 2GB RAM and 16GB storage
+- Domain `porametix.online` pointing to your ODROID IP
 
-## 📋 Quick Deployment (Recommended)
+### One-Command Deployment
 
-### 1. Initial Setup (One-time)
 ```bash
-# Download and run setup script
-wget https://raw.githubusercontent.com/PorametKeawubol/ToTobinProject/main/kiosk-app/deployment/odroid-setup.sh
-chmod +x odroid-setup.sh
-./odroid-setup.sh
-```
+# Quick deployment (recommended)
+wget -O- https://raw.githubusercontent.com/PorametKeawubol/ToTobinProject/main/kiosk-app/deployment/quick-odroid-deploy.sh | sudo bash
 
-### 2. Deploy Application
-```bash
-# Quick deployment
-wget https://raw.githubusercontent.com/PorametKeawubol/ToTobinProject/main/kiosk-app/deployment/deploy-odroid.sh
-chmod +x deploy-odroid.sh
-./deploy-odroid.sh
-```
-
-## 🔧 Manual Setup (Advanced)
-
-### 1. Install Dependencies
-```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install Docker
-sudo apt install -y docker.io docker-compose
-sudo systemctl enable docker
-sudo usermod -aG docker $USER
-
-# Install Nginx and SSL tools
-sudo apt install -y nginx certbot python3-certbot-nginx
-```
-
-### 2. Clone Repository
-```bash
-# Create app directory
-sudo mkdir -p /opt/totobin
-sudo chown $USER:$USER /opt/totobin
-cd /opt/totobin
-
-# Clone project
+# Or clone and run locally
 git clone https://github.com/PorametKeawubol/ToTobinProject.git
-cd ToTobinProject/kiosk-app
+cd ToTobinProject/kiosk-app/deployment
+sudo bash quick-odroid-deploy.sh
 ```
 
-### 3. Configure Environment
-```bash
-# Copy optimized config for ODROID
-cp next.config.odroid.ts next.config.ts
+### Full Deployment (with monitoring)
 
-# Create production environment
-cat > .env.production << EOF
+```bash
+sudo bash odroid-deploy.sh
+```
+
+## 📊 Performance Monitoring
+
+```bash
+# Check system status
+bash monitor-odroid.sh
+
+# Real-time monitoring
+watch -n 5 'bash monitor-odroid.sh'
+
+# Check application logs
+sudo journalctl -fu totobin-kiosk
+```
+
+## 🎯 What Gets Installed
+
+### Software Stack
+- **Node.js 18.x** (optimized for ARM64)
+- **yarn** (faster than npm on ARM)
+- **nginx** (reverse proxy with SSL)
+- **certbot** (automatic SSL certificates)
+
+### Services
+- **totobin-kiosk.service** - Main application
+- **nginx** - Web server with SSL termination
+
+### File Structure
+```
+/opt/totobin-kiosk/
+├── kiosk-app/              # Next.js application
+│   ├── .env.production     # Production environment
+│   ├── .next/              # Built application
+│   └── node_modules/       # Dependencies
+└── .git/                   # Git repository
+```
+
+## ⚙️ Configuration
+
+### Environment Variables
+The deployment creates `/opt/totobin-kiosk/kiosk-app/.env.production`:
+
+```bash
 NODE_ENV=production
 PORT=3000
-HARDWARE_API_KEY=your-secure-key
-DATABASE_URL=file:./data/totobin.db
-NEXTAUTH_URL=https://porametix.online
-NEXTAUTH_SECRET=$(openssl rand -base64 32)
-EOF
+NEXT_TELEMETRY_DISABLED=1
+DATABASE_URL="file:./dev.db"
+HARDWARE_API_KEY="prod-[random]"
+KIOSK_ID="odroid-kiosk-001"
+NEXTAUTH_URL="https://porametix.online"
+NEXTAUTH_SECRET="[random]"
 ```
 
-### 4. Deploy with Docker
+### Nginx Configuration
+- **HTTP (port 80)**: Redirects to HTTPS
+- **HTTPS (port 443)**: Proxies to Next.js on port 3000
+- **SSL**: Automatic Let's Encrypt certificates
+- **Security headers**: XSS protection, HSTS, etc.
+
+## 🔧 Performance Optimizations
+
+### ODROID C4 Specific
+- **CPU Governor**: Set to `performance` for better response times
+- **Memory**: Optimized swappiness for SSD/eMMC
+- **Process Limits**: Increased for Node.js
+- **yarn**: Used instead of npm for faster installs
+
+### Application Optimizations
+- **Static Caching**: 1-year cache for `_next/static/`
+- **Gzip Compression**: Enabled in nginx
+- **HTTP/2**: Enabled for better performance
+- **Keep-Alive**: Optimized connection handling
+
+## 🛠️ Management Commands
+
+### Application Management
 ```bash
-# Build and run optimized for ODROID
-docker-compose -f docker-compose.odroid.yml up -d --build
+# Restart application
+sudo systemctl restart totobin-kiosk
+
+# Check status
+sudo systemctl status totobin-kiosk
+
+# View logs
+sudo journalctl -fu totobin-kiosk
+
+# Stop/start
+sudo systemctl stop totobin-kiosk
+sudo systemctl start totobin-kiosk
 ```
 
-### 5. Configure Nginx Reverse Proxy
+### Updates
 ```bash
-# Create Nginx config
-sudo nano /etc/nginx/sites-available/totobin-kiosk
+# Update application
+cd /opt/totobin-kiosk
+sudo git pull
+cd kiosk-app
+sudo yarn install
+sudo yarn build
+sudo systemctl restart totobin-kiosk
+```
 
-# Add configuration:
-server {
-    listen 80;
-    server_name porametix.online www.porametix.online;
-    
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-# Enable site
-sudo ln -s /etc/nginx/sites-available/totobin-kiosk /etc/nginx/sites-enabled/
+### Nginx Management
+```bash
+# Test configuration
 sudo nginx -t
+
+# Reload configuration
+sudo systemctl reload nginx
+
+# Restart nginx
 sudo systemctl restart nginx
 ```
 
-### 6. Setup SSL Certificate
-```bash
-# Get Let's Encrypt certificate
-sudo certbot --nginx -d porametix.online -d www.porametix.online
-```
-
-## 📊 Performance Optimizations for ODROID C4
-
-### Memory Optimization
-```bash
-# Set memory limits in docker-compose.odroid.yml
-mem_limit: 768m
-memswap_limit: 768m
-cpus: '2.0'
-```
-
-### Node.js Optimization
-```bash
-# In .env.production
-NODE_OPTIONS=--max-old-space-size=512
-UV_THREADPOOL_SIZE=4
-```
-
-### System Optimization
-```bash
-# Increase swap if needed
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-```
-
-## 🔍 Monitoring & Maintenance
-
-### Check Application Status
-```bash
-# View container status
-docker-compose -f docker-compose.odroid.yml ps
-
-# View logs
-docker-compose -f docker-compose.odroid.yml logs -f
-
-# Health check
-curl http://localhost:3000/api/health
-```
-
-### Resource Monitoring
-```bash
-# System resources
-htop
-
-# Docker stats
-docker stats
-
-# Disk usage
-df -h
-```
-
-### Update Application
-```bash
-cd /opt/totobin/ToTobinProject/kiosk-app
-git pull origin main
-docker-compose -f docker-compose.odroid.yml up -d --build
-```
-
-## 🚨 Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-**1. Out of Memory**
+#### 1. Application won't start
 ```bash
-# Check memory usage
-free -h
+# Check service status
+sudo systemctl status totobin-kiosk
 
-# Restart container with memory limits
-docker-compose -f docker-compose.odroid.yml restart
+# Check logs
+sudo journalctl -u totobin-kiosk --lines=50
+
+# Check port availability
+sudo ss -tlnp | grep :3000
 ```
 
-**2. Docker Build Fails**
+#### 2. SSL certificate issues
 ```bash
-# Clean Docker cache
-docker system prune -f
-docker-compose -f docker-compose.odroid.yml build --no-cache
-```
-
-**3. SSL Certificate Issues**
-```bash
-# Renew certificate
+# Renew certificate manually
 sudo certbot renew
 
 # Test certificate
 sudo certbot certificates
 ```
 
-**4. Application Won't Start**
+#### 3. High memory usage
 ```bash
-# Check environment variables
-docker-compose -f docker-compose.odroid.yml config
+# Check memory usage
+free -h
 
-# View detailed logs
-docker-compose -f docker-compose.odroid.yml logs --tail=100
+# Restart application to free memory
+sudo systemctl restart totobin-kiosk
 ```
 
-## 📱 Hardware Integration
-
-### Connect ESP32/ODROID Hardware
+#### 4. Slow performance
 ```bash
-# Install hardware client
-cd /opt/totobin/ToTobinProject/hardware/odroid
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# Check CPU governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 
-# Run hardware service
-sudo systemctl enable totobin-hardware
-sudo systemctl start totobin-hardware
+# Set to performance mode
+echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 ```
 
-## 🌐 Access Your Application
-
-- **Local**: http://localhost:3000
-- **Domain**: https://porametix.online
-- **Health Check**: https://porametix.online/api/health
-
-## 📈 Performance Tips
-
-1. **Use SSD storage** for better I/O performance
-2. **Enable Gzip compression** in Nginx
-3. **Monitor memory usage** regularly
-4. **Use CDN** for static assets if needed
-5. **Keep system updated** for security
-
-## 🔒 Security Best Practices
-
-1. **Enable UFW firewall**
+### Performance Monitoring
 ```bash
-sudo ufw enable
-sudo ufw allow ssh
-sudo ufw allow 'Nginx Full'
+# CPU temperature
+cat /sys/class/thermal/thermal_zone0/temp
+
+# Memory usage
+free -h
+
+# Disk usage
+df -h
+
+# Network connections
+sudo ss -tlnp | grep :3000
 ```
 
-2. **Install fail2ban**
+## 📈 Expected Performance
+
+### ODROID C4 Specifications
+- **CPU**: Amlogic S905X3 (Quad-core ARM Cortex-A55)
+- **RAM**: 4GB LPDDR4
+- **Network**: Gigabit Ethernet
+- **Storage**: eMMC/microSD
+
+### Performance Expectations
+- **Response Time**: < 100ms for static pages
+- **API Response**: < 200ms for simple queries
+- **Memory Usage**: ~300-500MB for Next.js app
+- **CPU Usage**: ~5-15% during normal operation
+
+## 🌐 URLs and Endpoints
+
+After successful deployment:
+
+- **Main Application**: https://porametix.online
+- **Hardware API**: https://porametix.online/api/hardware
+- **Health Check**: https://porametix.online/api/hardware/current-status
+- **Queue API**: https://porametix.online/api/queue
+
+## 🔐 Security Features
+
+- **SSL/TLS**: Automatic Let's Encrypt certificates
+- **Security Headers**: XSS protection, HSTS, content type sniffing prevention
+- **API Authentication**: Hardware API key protection
+- **Process Isolation**: Non-root application execution
+- **Firewall Ready**: Only ports 80, 443, and 22 (SSH) needed
+
+## 📝 Logs and Monitoring
+
+### Log Locations
+- **Application**: `sudo journalctl -u totobin-kiosk`
+- **Nginx**: `/var/log/nginx/access.log`, `/var/log/nginx/error.log`
+- **System**: `/var/log/syslog`
+
+### Monitoring Script
+Run `bash monitor-odroid.sh` for comprehensive system status including:
+- CPU usage and temperature
+- Memory usage
+- Service status
+- Application health
+- Performance recommendations
+
+## 🚀 Hardware Integration
+
+The deployment automatically sets up:
+- Hardware API endpoints at `/api/hardware/*`
+- Authentication for hardware devices
+- GPIO control integration (if hardware client is deployed)
+- LED status monitoring endpoints
+
+To deploy the hardware client on the same ODROID:
 ```bash
-sudo apt install fail2ban
+# Install Python dependencies for hardware control
+sudo apt install python3-pip python3-rpi.gpio
+cd /opt/totobin-kiosk/hardware/odroid
+sudo python3 odroid_client.py
 ```
 
-3. **Regular security updates**
-```bash
-sudo apt update && sudo apt upgrade -y
-```
+## 💡 Tips for ODROID C4
 
-4. **Use strong passwords** and consider SSH key authentication
-
-## 📞 Support
-
-If you encounter issues:
-1. Check the logs: `docker-compose logs`
-2. Verify domain DNS settings
-3. Ensure ODROID has sufficient resources
-4. Check firewall settings
-
-Happy deploying! 🎉
+1. **Use eMMC storage** for better performance than microSD
+2. **Enable performance governor** for consistent response times
+3. **Monitor temperature** during heavy loads
+4. **Use yarn** instead of npm for faster package management
+5. **Regular updates** to keep dependencies current
