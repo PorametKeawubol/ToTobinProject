@@ -36,6 +36,10 @@ fi
 print_status "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
+# Install essential packages
+print_status "Installing essential packages..."
+sudo apt install -y wget curl git nano
+
 # Install Docker if not installed
 if ! command -v docker &> /dev/null; then
     print_status "Installing Docker..."
@@ -49,9 +53,17 @@ fi
 # Install Docker Compose if not installed
 if ! command -v docker-compose &> /dev/null; then
     print_status "Installing Docker Compose..."
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    # Get latest version
+    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
+    
+    # Create symlink if needed
+    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 fi
+
+# Verify Docker Compose version
+print_status "Docker Compose version: $(docker-compose --version)"
 
 # Create necessary directories
 print_status "Creating directories..."
