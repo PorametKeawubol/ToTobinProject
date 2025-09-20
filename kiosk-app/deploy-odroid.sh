@@ -47,7 +47,30 @@ if ! command -v docker &> /dev/null; then
     sh get-docker.sh
     sudo usermod -aG docker $USER
     rm get-docker.sh
-    print_warning "Please log out and log back in for Docker group changes to take effect"
+    print_warning "Docker installed. Starting Docker service..."
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    print_warning "Please log out and log back in for Docker group changes to take effect, or run: newgrp docker"
+    
+    # Apply group changes for current session
+    print_status "Applying Docker group for current session..."
+    newgrp docker << EONG
+    docker --version
+EONG
+else
+    print_status "Docker is already installed"
+    # Check if Docker is running
+    if ! docker info &> /dev/null; then
+        print_status "Starting Docker service..."
+        sudo systemctl start docker
+        
+        # Check if user is in docker group
+        if ! groups $USER | grep -q docker; then
+            print_status "Adding user to docker group..."
+            sudo usermod -aG docker $USER
+            print_warning "Please run: newgrp docker"
+        fi
+    fi
 fi
 
 # Install Docker Compose if not installed
@@ -107,10 +130,29 @@ EOF
 
 # Build and start services
 print_status "Building Docker images..."
-docker-compose -f docker-compose.prod.yml build --no-cache
+
+# Check Docker permissions
+if ! docker info &> /dev/null; then
+    print_error "Cannot connect to Docker daemon. Trying with sudo..."
+    print_warning "Running newgrp docker to apply group permissions..."
+    exec sg docker "$0 $*"
+fi
+
+# Try building with current user first
+if docker-compose -f docker-compose.prod.yml build --no-cache; then
+    print_status "Docker build successful"
+else
+    print_error "Docker build failed. Check the logs above."
+    exit 1
+fi
 
 print_status "Starting services..."
-docker-compose -f docker-compose.prod.yml up -d
+if docker-compose -f docker-compose.prod.yml up -d; then
+    print_status "Services started successfully"
+else
+    print_error "Failed to start services"
+    exit 1
+fi
 
 # Wait for services to be ready
 print_status "Waiting for services to start..."
