@@ -1,5 +1,5 @@
-# Use Node.js 18 alpine
-FROM node:18-alpine AS base
+# Use Node.js 20 alpine for better ARM64 support
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --only=production
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -47,7 +47,7 @@ USER nextjs
 
 EXPOSE 3000
 
-# Use environment variable from Cloud Run for port
+# Use environment variable for port
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 

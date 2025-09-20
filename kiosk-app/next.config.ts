@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Remove standalone for Vercel deployment
+  // Enable standalone for self-hosting on Odroid
+  output: "standalone",
   experimental: {
     serverComponentsExternalPackages: ["@google-cloud/firestore"],
   },
