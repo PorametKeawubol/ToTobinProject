@@ -38,12 +38,6 @@ sudo systemctl start totobin-hardware
 - VALVE_PIN = 5 (Topping valve)
 - SENSOR_PIN = 34 (Cup sensor)
 
-### Odroid:
-- LED = GPIO 18 (Status indicator)
-- PUMP = GPIO 24 (Drink pump)
-- VALVE = GPIO 25 (Topping valve)  
-- SENSOR = GPIO 23 (Cup sensor)
-
 ## WiFi Configuration
 Update these variables in the code:
 - ssid = "YOUR_WIFI_SSID"
