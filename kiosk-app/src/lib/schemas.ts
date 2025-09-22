@@ -80,46 +80,46 @@ export const SAMPLE_DRINKS: Drink[] = [
   {
     id: "thai-tea",
     name: "ชาไทย",
-    basePrice: 45,
+    basePrice: 5,
     description: "ชาไทยสูตรดั้งเดิม หอมหวานมัน",
   },
   {
     id: "green-tea",
     name: "ชาเขียว",
-    basePrice: 40,
+    basePrice: 5,
     description: "ชาเขียวญี่ปุ่น เข้มข้น สดชื่น",
   },
   {
     id: "coffee",
     name: "กาแฟ",
-    basePrice: 50,
+    basePrice: 5,
     description: "กาแฟคั่วกลาง หอมกรุ่น",
   },
   {
     id: "chocolate",
     name: "โกโก้",
-    basePrice: 48,
+    basePrice: 5,
     description: "โกโก้เข้มข้น หวานหอม",
   },
   {
     id: "milk-tea",
     name: "ชานม",
-    basePrice: 42,
+    basePrice: 5,
     description: "ชานมไต้หวัน นุ่มนวล",
   },
   {
     id: "fruit-tea",
     name: "ชาผลไม้",
-    basePrice: 55,
+    basePrice: 5,
     description: "ชาผลไม้รวม สดชื่น",
   },
 ];
 
 export const SAMPLE_TOPPINGS: Topping[] = [
-  { id: "pearl", name: "ไข่มุก", price: 10 },
-  { id: "jelly", name: "เจลลี่", price: 8 },
-  { id: "pudding", name: "พุดดิ้ง", price: 12 },
-  { id: "grass-jelly", name: "เฉาก๊วย", price: 10 },
-  { id: "coconut", name: "มะพร้าวอ่อน", price: 15 },
-  { id: "red-bean", name: "ถั่วแดง", price: 10 },
+  { id: "pearl", name: "ไข่มุก", price: 1 },
+  { id: "jelly", name: "เจลลี่", price: 1 },
+  { id: "pudding", name: "พุดดิ้ง", price: 1 },
+  { id: "grass-jelly", name: "เฉาก๊วย", price: 1 },
+  { id: "coconut", name: "มะพร้าวอ่อน", price: 1 },
+  { id: "red-bean", name: "ถั่วแดง", price: 1 },
 ];

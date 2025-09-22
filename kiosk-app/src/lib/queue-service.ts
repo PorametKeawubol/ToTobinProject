@@ -72,8 +72,23 @@ class MockFirestore {
     status: OrderQueue["status"],
     hardwareId?: string
   ): Promise<void> {
-    const order = this.orders.get(orderId);
-    if (!order) return;
+    // Support updating by either queue entry id or the original orderId
+    let targetKey: string | null = null;
+    let order = this.orders.get(orderId);
+
+    if (order) {
+      targetKey = orderId;
+    } else {
+      for (const [key, value] of this.orders.entries()) {
+        if (value.orderId === orderId || value.id === orderId) {
+          order = value;
+          targetKey = key;
+          break;
+        }
+      }
+    }
+
+    if (!order || !targetKey) return;
 
     order.status = status;
 
@@ -86,7 +101,7 @@ class MockFirestore {
       order.completedAt = new Date();
     }
 
-    this.orders.set(orderId, order);
+    this.orders.set(targetKey, order);
     this.notifyQueueUpdate();
   }
 
@@ -114,6 +129,20 @@ class MockFirestore {
 
   async getBrewingSteps(orderId: string): Promise<BrewingStep[]> {
     return this.brewingSteps.get(orderId) || [];
+  }
+
+  async getOrderByOrderId(orderId: string): Promise<OrderQueue | null> {
+    // Try direct match on queue id first
+    const byQueueId = this.orders.get(orderId);
+    if (byQueueId) return byQueueId;
+
+    // Then find by original orderId
+    for (const value of this.orders.values()) {
+      if (value.orderId === orderId) {
+        return value;
+      }
+    }
+    return null;
   }
 
   private getQueueLength(): number {

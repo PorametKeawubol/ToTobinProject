@@ -76,6 +76,16 @@ export function LEDStatusDisplay({ orderId }: { orderId: string }) {
     );
   }
 
+  // Ordered brewing steps for progress UI
+  const orderedStepKeys = [
+    "preparing_cup",
+    "adding_toppings",
+    "adding_ice",
+    "brewing_drink",
+    "completed",
+  ];
+  const currentIdx = orderedStepKeys.indexOf(hardwareStatus.currentStep || "");
+
   const ledSteps = [
     {
       key: "preparing",
@@ -174,6 +184,47 @@ export function LEDStatusDisplay({ orderId }: { orderId: string }) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Brewing Step Progress */}
+        <div className="space-y-3">
+          <h4 className="font-medium text-gray-700">ขั้นตอนการทำเครื่องดื่ม</h4>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { key: "preparing_cup", label: "เตรียมแก้ว" },
+              { key: "adding_toppings", label: "ใส่ท็อปปิ้ง" },
+              { key: "adding_ice", label: "ใส่น้ำแข็ง" },
+              { key: "brewing_drink", label: "ใส่เครื่องดื่ม" },
+              { key: "completed", label: "เสร็จสิ้น" },
+            ].map((s, idx) => {
+              const isActive = idx === currentIdx;
+              const isDone = currentIdx > idx;
+              return (
+                <div key={s.key} className="space-y-1">
+                  <div
+                    className={`h-2 rounded-full transition-colors ${
+                      isDone
+                        ? "bg-green-500"
+                        : isActive
+                        ? "bg-blue-500"
+                        : "bg-gray-200"
+                    }`}
+                  />
+                  <div
+                    className={`text-center text-xs ${
+                      isDone
+                        ? "text-green-700"
+                        : isActive
+                        ? "text-blue-700"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {s.label}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

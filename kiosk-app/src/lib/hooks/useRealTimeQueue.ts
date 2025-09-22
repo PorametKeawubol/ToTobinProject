@@ -14,6 +14,7 @@ export function useRealTimeQueue() {
 
   useEffect(() => {
     let eventSource: EventSource | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     const connectSSE = () => {
       try {
@@ -48,10 +49,41 @@ export function useRealTimeQueue() {
               connectSSE();
             }
           }, 3000);
+
+          // Fallback polling while disconnected
+          if (!pollInterval) {
+            pollInterval = setInterval(async () => {
+              try {
+                const res = await fetch("/api/queue");
+                const data = await res.json();
+                if (data?.success) {
+                  setQueueData({
+                    queue: data.queue,
+                    totalInQueue: data.totalInQueue,
+                    timestamp: new Date().toISOString(),
+                  });
+                }
+              } catch (_e) {}
+            }, 2000);
+          }
         };
       } catch (err) {
         console.error("SSE connection error:", err);
         setError("Failed to connect");
+        // Start fallback polling immediately
+        pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch("/api/queue");
+            const data = await res.json();
+            if (data?.success) {
+              setQueueData({
+                queue: data.queue,
+                totalInQueue: data.totalInQueue,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } catch (_e) {}
+        }, 2000);
       }
     };
 
@@ -62,6 +94,10 @@ export function useRealTimeQueue() {
       if (eventSource) {
         eventSource.close();
         setIsConnected(false);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
       }
     };
   }, []);
