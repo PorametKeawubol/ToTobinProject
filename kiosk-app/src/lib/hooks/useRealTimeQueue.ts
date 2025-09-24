@@ -15,13 +15,22 @@ export function useRealTimeQueue() {
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const connectSSE = () => {
       try {
+        // Clean up existing connection
+        if (eventSource) {
+          eventSource.close();
+        }
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+        }
+
         eventSource = new EventSource("/api/events/queue");
 
         eventSource.onopen = () => {
-          console.log("SSE connected");
+          console.log("SSE connected successfully");
           setIsConnected(true);
           setError(null);
         };
@@ -40,31 +49,53 @@ export function useRealTimeQueue() {
 
         eventSource.onerror = (event) => {
           console.error("SSE error:", event);
-          setIsConnected(false);
-          setError("Connection lost. Retrying...");
+          
+          // Only show error if connection is actually lost
+          if (eventSource?.readyState === EventSource.CLOSED) {
+            setIsConnected(false);
+            setError("Connection lost. Retrying...");
 
-          // Auto-reconnect after 3 seconds
-          setTimeout(() => {
-            if (eventSource?.readyState === EventSource.CLOSED) {
-              connectSSE();
+            // Clear existing intervals
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-          }, 3000);
 
-          // Fallback polling while disconnected
-          if (!pollInterval) {
-            pollInterval = setInterval(async () => {
-              try {
-                const res = await fetch("/api/queue");
-                const data = await res.json();
-                if (data?.success) {
-                  setQueueData({
-                    queue: data.queue,
-                    totalInQueue: data.totalInQueue,
-                    timestamp: new Date().toISOString(),
-                  });
+            // Auto-reconnect after 1 second (even faster)
+            reconnectTimeout = setTimeout(() => {
+              if (eventSource?.readyState === EventSource.CLOSED) {
+                console.log("Attempting SSE reconnection...");
+                connectSSE();
+              }
+            }, 1000);
+
+            // Fallback polling while disconnected
+            if (!pollInterval) {
+              pollInterval = setInterval(async () => {
+                try {
+                  const res = await fetch("/api/queue");
+                  const data = await res.json();
+                  if (data?.success) {
+                    setQueueData({
+                      queue: data.queue,
+                      totalInQueue: data.totalInQueue,
+                      timestamp: new Date().toISOString(),
+                    });
+                    // Clear error if polling works
+                    setError(null);
+                  }
+                } catch (e) {
+                  console.error("Polling error:", e);
                 }
-              } catch (_e) {}
-            }, 2000);
+              }, 1500); // Faster polling
+            }
+          } else if (eventSource?.readyState === EventSource.CONNECTING) {
+            // Connection is trying to reconnect
+            console.log("SSE reconnecting...");
+            setError("Reconnecting...");
+          } else {
+            // For other errors, just log but don't show error to user
+            console.warn("SSE warning:", event);
           }
         };
       } catch (err) {
@@ -99,6 +130,10 @@ export function useRealTimeQueue() {
         clearInterval(pollInterval);
         pollInterval = null;
       }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
     };
   }, []);
 
@@ -116,8 +151,38 @@ export function useOrderStatus(orderId: string | null) {
 
   useEffect(() => {
     if (orderId && queueData) {
-      const order = queueData.queue.find((q) => q.id === orderId);
-      setOrderStatus(order || null);
+      console.log(`useOrderStatus: Looking for orderId=${orderId} in queue:`, {
+        totalOrders: queueData.queue.length,
+        orders: queueData.queue.map(q => ({ 
+          id: q.id, 
+          orderId: q.orderId,
+          status: q.status, 
+          position: q.queuePosition 
+        })),
+        lookingFor: orderId
+      });
+      
+      // Search by orderId first, then by id as fallback
+      const order = queueData.queue.find((q) => q.orderId === orderId || q.id === orderId);
+      
+      if (order) {
+        console.log(`useOrderStatus: Found order:`, { 
+          id: order.id, 
+          orderId: order.orderId,
+          status: order.status, 
+          position: order.queuePosition 
+        });
+        setOrderStatus(order);
+      } else {
+        console.log(`useOrderStatus: No order found for orderId=${orderId}. Available orders:`, 
+          queueData.queue.map(q => ({ id: q.id, orderId: q.orderId, status: q.status }))
+        );
+        setOrderStatus(null);
+      }
+    } else if (orderId && !queueData) {
+      console.log(`useOrderStatus: orderId=${orderId} but no queueData yet`);
+    } else if (!orderId) {
+      console.log(`useOrderStatus: no orderId provided`);
     }
   }, [orderId, queueData]);
 

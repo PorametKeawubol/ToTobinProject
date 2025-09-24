@@ -3,10 +3,8 @@ const nextConfig = {
   // Enable standalone for production
   output: "standalone",
   
-  // Experimental features
-  experimental: {
-    serverComponentsExternalPackages: ["@google-cloud/firestore"],
-  },
+  // External packages for server components
+  serverExternalPackages: ["@google-cloud/firestore"],
   
   // Performance optimizations
   compiler: {

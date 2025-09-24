@@ -20,24 +20,155 @@ import { useOrderRedirect } from "@/lib/hooks/useOrderRedirect";
 
 export default function QueuePage() {
   const router = useRouter();
-  const { currentUserOrder } = useQueueStore();
+  const { currentUserOrder, setCurrentUserOrder } = useQueueStore();
   const { queueData, isConnected, error } = useRealTimeQueue();
-  const orderStatus = useOrderStatus(currentUserOrder?.id || null);
+  const orderStatus = useOrderStatus(currentUserOrder?.orderId || null);
   const { shouldShowQueue, shouldShowInProgress } = useOrderRedirect();
 
-  // Redirect logic based on order status
+  // Helper function to get the correct status and position
+  const getLiveStatus = () => {
+    if (orderStatus) {
+      console.log(`getLiveStatus: Using orderStatus`, {
+        status: orderStatus.status,
+        queuePosition: orderStatus.queuePosition
+      });
+      return {
+        status: orderStatus.status,
+        queuePosition: orderStatus.queuePosition
+      };
+    }
+    
+    if (queueData && currentUserOrder) {
+      const foundOrder = queueData.queue.find((q) => 
+        q.orderId === currentUserOrder.orderId || q.id === currentUserOrder.id
+      );
+      if (foundOrder) {
+        console.log(`getLiveStatus: Found in queueData`, {
+          status: foundOrder.status,
+          queuePosition: foundOrder.queuePosition
+        });
+        return {
+          status: foundOrder.status,
+          queuePosition: foundOrder.queuePosition
+        };
+      }
+    }
+    
+    console.log(`getLiveStatus: Using fallback`, {
+      status: currentUserOrder?.status || "pending",
+      queuePosition: currentUserOrder?.queuePosition || 1
+    });
+    return {
+      status: currentUserOrder?.status || "pending",
+      queuePosition: currentUserOrder?.queuePosition || 1
+    };
+  };
+
+  // Update currentUserOrder when we get fresh data from SSE
+  useEffect(() => {
+    if (orderStatus && currentUserOrder) {
+      // Update the store with fresh data from SSE
+      if (orderStatus.queuePosition !== currentUserOrder.queuePosition || 
+          orderStatus.status !== currentUserOrder.status) {
+        console.log("Updating currentUserOrder from SSE data:", {
+          old: {
+            status: currentUserOrder.status,
+            queuePosition: currentUserOrder.queuePosition
+          },
+          new: {
+            status: orderStatus.status,
+            queuePosition: orderStatus.queuePosition
+          }
+        });
+        
+        // Update the store
+        setCurrentUserOrder({
+          ...currentUserOrder,
+          status: orderStatus.status,
+          queuePosition: orderStatus.queuePosition
+        });
+      }
+    }
+  }, [orderStatus, currentUserOrder, setCurrentUserOrder]);
+
+  // Redirect logic based on live order status (SSE) or fallback to store
   useEffect(() => {
     if (!currentUserOrder) {
       router.push("/");
       return;
     }
 
+    const { status: liveStatus, queuePosition: livePosition } = getLiveStatus();
+
+    console.log(`Queue redirect check:`, {
+      liveStatus,
+      livePosition,
+      orderStatus: orderStatus ? {
+        id: orderStatus.id,
+        orderId: orderStatus.orderId,
+        status: orderStatus.status,
+        queuePosition: orderStatus.queuePosition
+      } : null,
+      currentUserOrder: {
+        id: currentUserOrder.id,
+        orderId: currentUserOrder.orderId,
+        status: currentUserOrder.status,
+        queuePosition: currentUserOrder.queuePosition
+      },
+      queueData: queueData ? {
+        totalOrders: queueData.queue.length,
+        orders: queueData.queue.map(q => ({
+          id: q.id,
+          orderId: q.orderId,
+          status: q.status,
+          queuePosition: q.queuePosition
+        }))
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+
     // If user's order is being processed, redirect to in-progress page
-    if (shouldShowInProgress) {
+    if (liveStatus === "preparing" || liveStatus === "brewing") {
+      console.log(`Redirecting to in-progress: liveStatus=${liveStatus}`);
       router.push("/in-progress");
       return;
     }
-  }, [currentUserOrder, shouldShowInProgress, router]);
+
+    // If user is first in queue (position 1) and pending, redirect to in-progress page
+    // This handles the case where hardware hasn't picked up the order yet
+    if (liveStatus === "pending" && livePosition === 1) {
+      console.log(`Redirecting to in-progress: first in queue, position=${livePosition}`, {
+        currentUserOrderId: currentUserOrder.orderId,
+        liveStatus,
+        livePosition,
+        orderStatus: orderStatus ? {
+          id: orderStatus.id,
+          orderId: orderStatus.orderId,
+          status: orderStatus.status,
+          queuePosition: orderStatus.queuePosition
+        } : null
+      });
+      router.push("/in-progress");
+      return;
+    }
+
+    // Additional check: if user's order is being processed by hardware
+    // This handles cases where status might not be updated immediately
+    if (liveStatus === "pending" && livePosition === 1 && !isConnected) {
+      console.log(`Redirecting to in-progress: first in queue but SSE disconnected, position=${livePosition}`);
+      router.push("/in-progress");
+      return;
+    }
+
+    // If completed, go to done page
+    if (liveStatus === "completed") {
+      console.log(`Redirecting to done: liveStatus=${liveStatus}`);
+      router.push("/done");
+      return;
+    }
+
+    console.log(`Staying in queue: liveStatus=${liveStatus}, livePosition=${livePosition}`);
+  }, [currentUserOrder, orderStatus, queueData, router]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -116,16 +247,21 @@ export default function QueuePage() {
 
         <h1 className="text-3xl font-bold text-primary">สถานะคิว</h1>
 
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-3 h-3 rounded-full ${
-              isConnected ? "bg-green-500" : "bg-red-500"
-            }`}
-          />
-          <span className="text-sm text-muted-foreground">
-            {isConnected ? "เชื่อมต่อแล้ว" : "ตัดการเชื่อมต่อ"}
-          </span>
-        </div>
+         <div className="flex items-center gap-2">
+           <div
+             className={`w-3 h-3 rounded-full ${
+               isConnected ? "bg-green-500" : "bg-yellow-500"
+             }`}
+           />
+           <span className="text-sm text-muted-foreground">
+             {isConnected ? "เชื่อมต่อแล้ว" : "กำลังเชื่อมต่อ..."}
+           </span>
+           {error && (
+             <span className="text-xs text-red-500 ml-2">
+               {error}
+             </span>
+           )}
+         </div>
       </div>
 
       <div className="max-w-4xl mx-auto space-y-6">
@@ -145,15 +281,15 @@ export default function QueuePage() {
               </div>
               <Badge
                 className={`${getStatusColor(
-                  orderStatus?.status || currentUserOrder.status
+                  getLiveStatus().status
                 )} text-lg px-4 py-2`}
               >
                 <div className="flex items-center gap-2">
                   {getStatusIcon(
-                    orderStatus?.status || currentUserOrder.status
+                    getLiveStatus().status
                   )}
                   {getStatusText(
-                    orderStatus?.status || currentUserOrder.status
+                    getLiveStatus().status
                   )}
                 </div>
               </Badge>
@@ -163,7 +299,7 @@ export default function QueuePage() {
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl font-bold text-primary">
                   #
-                  {orderStatus?.queuePosition || currentUserOrder.queuePosition}
+                  {getLiveStatus().queuePosition}
                 </div>
                 <p className="text-sm text-muted-foreground">ลำดับในคิว</p>
               </div>
@@ -206,12 +342,12 @@ export default function QueuePage() {
             <div className="flex items-center gap-3 mb-6">
               <Users className="w-6 h-6 text-primary" />
               <h2 className="kiosk-text-xl">คิวที่รอ</h2>
-              {queueData && (
-                <Badge variant="secondary" className="text-lg px-3 py-1">
-                  {queueData.queue.filter((q) => q.queuePosition > 1).length}{" "}
-                  คิว
-                </Badge>
-              )}
+               {queueData && (
+                 <Badge variant="secondary" className="text-lg px-3 py-1">
+                   {queueData.queue.filter((q) => q.id !== currentUserOrder.id).length}{" "}
+                   คิว
+                 </Badge>
+               )}
             </div>
 
             {error && (
@@ -223,7 +359,7 @@ export default function QueuePage() {
             <div className="space-y-3">
               <AnimatePresence>
                 {queueData?.queue
-                  .filter((queueItem) => queueItem.queuePosition > 1) // Hide position 1 (they're in in-progress)
+                  .filter((queueItem) => queueItem.id !== currentUserOrder.id) // Hide current user's order
                   .map((queueItem, index) => (
                     <motion.div
                       key={queueItem.id}
@@ -243,9 +379,7 @@ export default function QueuePage() {
                             #{queueItem.queuePosition}
                           </div>
                           <div>
-                            <p className="font-semibold">
-                              {queueItem.order.drinkName}
-                            </p>
+                            <p className="font-semibold">{queueItem.order.drinkName}</p>
                             <p className="text-sm text-muted-foreground">
                               คำสั่งที่: #{queueItem.id.slice(-8).toUpperCase()}
                             </p>
@@ -276,8 +410,14 @@ export default function QueuePage() {
                   ))}
               </AnimatePresence>
 
-              {queueData?.queue.filter((q) => q.queuePosition > 1).length ===
-                0 && (
+              {!queueData ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">⏳</div>
+                  <p className="text-lg text-muted-foreground">
+                    กำลังโหลดข้อมูลคิว...
+                  </p>
+                </div>
+              ) : queueData.queue.filter((q) => q.id !== currentUserOrder.id).length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-4">✨</div>
                   <p className="text-lg text-muted-foreground">
@@ -286,14 +426,24 @@ export default function QueuePage() {
                   <p className="text-sm text-muted-foreground mt-2">
                     คิวของคุณกำลังถูกดำเนินการ
                   </p>
+                   {/* Auto redirect if user is first in queue or being processed */}
+                   {(getLiveStatus().status === "preparing" || 
+                     getLiveStatus().status === "brewing" || 
+                     (getLiveStatus().status === "pending" && getLiveStatus().queuePosition === 1)) && (
+                     <div className="mt-4">
+                       <p className="text-blue-600 font-medium">
+                         กำลังเปลี่ยนไปหน้าเครื่องกำลังทำงาน...
+                       </p>
+                     </div>
+                   )}
                 </div>
-              )}
+              ) : null}
             </div>
           </Card>
         </motion.div>
 
         {/* Status completed - redirect option */}
-        {orderStatus?.status === "completed" && (
+        {getLiveStatus().status === "completed" && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}

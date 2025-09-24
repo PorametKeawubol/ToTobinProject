@@ -8,9 +8,10 @@
 
 const fetch = global.fetch || (await import("node-fetch")).default;
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const BASE_URL = process.env.BASE_URL || "https://porametix.online";
 const HARDWARE_ID = process.env.HARDWARE_ID || "esp32-001";
-const API_KEY = process.env.HARDWARE_API_KEY || "dev-hardware-key";
+const API_KEY =
+  process.env.HARDWARE_API_KEY || "odroid-hardware-key-1758367749";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -83,7 +84,7 @@ async function brew(orderId) {
       message: s.message,
     });
     if (s.step !== "completed") {
-      await sleep(20000); // 20s per state to match UI
+      await sleep(10000); // 10s per state for faster testing
     }
   }
 }
@@ -99,7 +100,7 @@ async function main() {
         console.log(`[sim] Completed order ${data.order.orderId}`);
       } else {
         // No jobs; wait a bit
-        await sleep(3000);
+        await sleep(2000); // Faster polling
       }
     } catch (err) {
       console.error("[sim] Error:", err.message);
@@ -109,5 +110,3 @@ async function main() {
 }
 
 main();
-
-

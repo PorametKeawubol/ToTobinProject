@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
       queue: queue.map((order) => ({
         id: order.id,
         orderId: order.orderId,
+        // Use the queuePosition from the order itself (consistent with service)
         queuePosition: order.queuePosition,
         status: order.status,
         estimatedTime: order.estimatedTime,
