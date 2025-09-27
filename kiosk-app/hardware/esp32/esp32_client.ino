@@ -7,8 +7,8 @@ const char *ssid = "abc";
 const char *password = "abc12345";
 
 // ===== API Configuration =====
-const char *baseURL = "https://porametix.online/api";
-const char *hardwareAPIKey = "dev-hardware-key";
+const char *baseURL = "http://porametix.online/api";
+const char *hardwareAPIKey = "odroid-hardware-key-1758367749";
 const char *hardwareId = "esp32-001";
 
 // ===== Hardware pins (adjust based on your setup) =====

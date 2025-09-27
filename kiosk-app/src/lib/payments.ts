@@ -33,7 +33,7 @@ export const Payments = {
         orderId,
         amount,
         qrImageDataUrl,
-        expiresInSec: 60, // 60 seconds as specified
+        expiresInSec: 150, // 150 seconds as specified
       };
     } catch (error) {
       console.error("Error creating PromptPay QR:", error);

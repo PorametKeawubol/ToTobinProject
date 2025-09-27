@@ -5,19 +5,19 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Clock, X, CheckCircle, Users } from "lucide-react";
+import { ArrowLeft, Clock, X, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { useCartStore, useOrderStore, useKioskStore } from "@/lib/stores";
+import { useCartStore, useOrderStore } from "@/lib/stores";
 import { useQueueStore } from "@/lib/queue-service";
 import { SAMPLE_DRINKS } from "@/lib/schemas";
 import type { Order } from "@/lib/schemas";
+import type { OrderQueue } from "@/lib/queue-schemas";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { currentItem, clearCart } = useCartStore();
   const { setCurrentOrder } = useOrderStore();
-  const { setLocked } = useKioskStore();
-  const { addToQueue, currentUserOrder } = useQueueStore();
+  const { setCurrentUserOrder } = useQueueStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -147,16 +147,44 @@ export default function CheckoutPage() {
     try {
       console.log("Payment success - Adding to queue:", order);
 
-      // Add to queue instead of immediate processing
-      const queueOrder = await addToQueue({
-        orderId: order.id,
-        drinkName: currentItem?.drink.name || "เครื่องดื่ม",
-        toppings: currentItem?.options.toppings?.map((t) => t.name) || [],
-        totalAmount: order.amount,
-        sessionId: Date.now().toString(),
+      // Add to queue via server API to centralize queue positions
+      const resp = await fetch("/api/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          sessionId: Date.now().toString(),
+          drinkName: currentItem?.drink.name || "เครื่องดื่ม",
+          toppings: currentItem?.options.toppings?.map((t) => t.name) || [],
+          totalAmount: order.amount,
+          size: "Regular",
+        }),
       });
 
-      console.log("Added to queue:", queueOrder);
+      if (!resp.ok) throw new Error("Failed to add to queue");
+      const { queueOrder } = await resp.json();
+
+      // Set current user order from the server response ONLY (avoid client-side queue injection)
+      const clientQueueOrder: OrderQueue = {
+        id: queueOrder.id,
+        orderId: queueOrder.orderId || order.id,
+        queuePosition: queueOrder.queuePosition,
+        status: queueOrder.status,
+        estimatedTime: queueOrder.estimatedTime,
+        createdAt: new Date(),
+        customer: {
+          sessionId: "anonymous",
+        },
+        order: {
+          drinkName: currentItem?.drink.name || "เครื่องดื่ม",
+          toppings: currentItem?.options.toppings?.map((t) => t.name) || [],
+          totalAmount: order.amount,
+          size: "Regular",
+        },
+      };
+      setCurrentUserOrder(clientQueueOrder);
+
+      console.log("Added to queue (server):", queueOrder);
 
       // Redirect to queue status page
       router.push("/queue");

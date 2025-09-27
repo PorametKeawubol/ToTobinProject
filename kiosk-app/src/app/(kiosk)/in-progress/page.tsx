@@ -5,19 +5,9 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
-import { useOrderStore, useKioskStore } from "@/lib/stores";
+import { useKioskStore } from "@/lib/stores";
 import { useQueueStore } from "@/lib/queue-service";
-import { LEDStatusDisplay } from "@/components/LEDStatusDisplay";
-import { SAMPLE_DRINKS } from "@/lib/schemas";
-import type { Order } from "@/lib/schemas";
-
-const BREWING_MESSAGES = [
-  "กำลังเตรียมน้ำร้อน...",
-  "กำลังชงเครื่องดื่ม...",
-  "กำลังปรับรสชาติ...",
-  "กำลังเติมท็อปปิ้ง...",
-  "กำลังจัดเสิร์ฟ...",
-];
+import { useOrderStatus } from "@/lib/hooks/useRealTimeQueue";
 
 const BREWING_STEPS = [
   { name: "preparing_cup", message: "กำลังเตรียมแก้ว", duration: 8 },
@@ -29,13 +19,12 @@ const BREWING_STEPS = [
 
 export default function InProgressPage() {
   const router = useRouter();
-  const { currentOrder, updateCurrentOrder } = useOrderStore();
   const { currentUserOrder } = useQueueStore();
   const { unlock } = useKioskStore();
+  const orderStatus = useOrderStatus(currentUserOrder?.orderId || null);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [estimatedTime, setEstimatedTime] = useState(45); // 45 seconds mock
   const [timeRemaining, setTimeRemaining] = useState(45);
 
   useEffect(() => {
@@ -45,19 +34,44 @@ export default function InProgressPage() {
       return;
     }
 
+    // Use live status from SSE or fallback to store
+    const liveStatus = orderStatus?.status ?? currentUserOrder.status;
+    const livePosition = orderStatus?.queuePosition ?? currentUserOrder.queuePosition;
+
     const isProcessing =
-      currentUserOrder.status === "preparing" ||
-      currentUserOrder.status === "brewing";
+      liveStatus === "preparing" ||
+      liveStatus === "brewing";
 
     const isFirstInQueue =
-      currentUserOrder.status === "pending" &&
-      currentUserOrder.queuePosition === 1;
+      liveStatus === "pending" &&
+      livePosition === 1;
 
     // Allow access if processing OR first in queue
-    if (!isProcessing && !isFirstInQueue) {
+    // But don't redirect back if SSE is disconnected and we're still first in queue
+    if (!isProcessing && !isFirstInQueue && livePosition !== 1) {
+      console.log(`Redirecting to queue: liveStatus=${liveStatus}, livePosition=${livePosition}`, {
+        currentUserOrderId: currentUserOrder.orderId,
+        isProcessing,
+        isFirstInQueue,
+        livePosition,
+        orderStatus: orderStatus ? {
+          id: orderStatus.id,
+          orderId: orderStatus.orderId,
+          status: orderStatus.status,
+          queuePosition: orderStatus.queuePosition
+        } : null,
+        currentUserOrder: {
+          id: currentUserOrder.id,
+          orderId: currentUserOrder.orderId,
+          status: currentUserOrder.status,
+          queuePosition: currentUserOrder.queuePosition
+        }
+      });
       router.push("/queue");
       return;
     }
+
+    console.log(`Staying in in-progress: liveStatus=${liveStatus}, livePosition=${livePosition}`);
 
     // Poll for real hardware status instead of mock
     const statusInterval = setInterval(async () => {
@@ -71,7 +85,6 @@ export default function InProgressPage() {
           const {
             progress: hwProgress,
             currentStep: hwStep,
-            message,
             estimatedTime: hwEstimatedTime,
           } = statusData.order;
 
@@ -105,32 +118,7 @@ export default function InProgressPage() {
     }, 2000); // Check every 2 seconds
 
     return () => clearInterval(statusInterval);
-  }, [currentUserOrder, router]);
-
-  // Function to trigger ESP32 LED completion signal
-  const triggerESP32Completion = async () => {
-    try {
-      const response = await fetch("/api/hardware/trigger", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          hardwareId: "esp32-001",
-          action: "completion_signal",
-          orderId: currentUserOrder?.id,
-          ledPin: 2, // LED pin for completion signal
-          duration: 3000, // 3 seconds blink
-        }),
-      });
-
-      if (response.ok) {
-        console.log("ESP32 completion signal sent successfully");
-      }
-    } catch (error) {
-      console.error("Error sending ESP32 completion signal:", error);
-    }
-  };
+  }, [currentUserOrder, orderStatus, router]);
 
   const unlockAndRedirect = async () => {
     try {
@@ -154,7 +142,6 @@ export default function InProgressPage() {
     );
   }
 
-  const drink = SAMPLE_DRINKS.find((d) => d.id === currentUserOrder.orderId);
   const currentStepData = BREWING_STEPS[currentStep] || BREWING_STEPS[0];
   const isCompleted = progress >= 100;
 
@@ -208,7 +195,7 @@ export default function InProgressPage() {
               <h1 className="text-3xl font-bold mb-2">
                 {isCompleted
                   ? "เสร็จแล้ว!"
-                  : currentUserOrder.status === "pending"
+                  : (orderStatus?.status ?? currentUserOrder.status) === "pending"
                   ? "รอเครื่องเริ่มทำ"
                   : "กำลังทำเครื่องดื่ม"}
               </h1>
@@ -217,8 +204,8 @@ export default function InProgressPage() {
               </div>
 
               {/* Queue Position Info */}
-              {currentUserOrder.status === "pending" &&
-                currentUserOrder.queuePosition === 1 && (
+              {(orderStatus?.status ?? currentUserOrder.status) === "pending" &&
+                (orderStatus?.queuePosition ?? currentUserOrder.queuePosition) === 1 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                     <div className="text-blue-800 font-medium">
                       🎯 คำสั่งของคุณอยู่ลำดับที่ 1
@@ -264,26 +251,40 @@ export default function InProgressPage() {
               </AnimatePresence>
             </div>
 
-            {/* LED Status Display */}
-            {!isCompleted && (
-              <div className="mb-8">
-                {currentUserOrder.status === "pending" ? (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                    <div className="text-center">
-                      <div className="text-4xl mb-3">⏳</div>
-                      <h3 className="font-semibold text-yellow-800 mb-2">
-                        กำลังรอเครื่องทำ
-                      </h3>
-                      <p className="text-yellow-700">
-                        เครื่องจะเริ่มทำเครื่องดื่มของคุณในไม่ช้า
-                      </p>
+            {/* Brewing Step Progress */}
+            <div className="mb-8">
+              <h4 className="font-medium text-gray-700">ขั้นตอนการทำเครื่องดื่ม</h4>
+              <div className="grid grid-cols-5 gap-3 mt-3">
+                {BREWING_STEPS.map((s, idx) => {
+                  const isActive = idx === currentStep && !isCompleted;
+                  const isDone = idx < currentStep || (isCompleted && idx === BREWING_STEPS.length - 1);
+                  return (
+                    <div key={s.name} className="space-y-1">
+                      <div
+                        className={`h-2 rounded-full ${
+                          isDone
+                            ? "bg-green-500"
+                            : isActive
+                            ? "bg-blue-500"
+                            : "bg-gray-200"
+                        }`}
+                      />
+                      <div
+                        className={`text-center text-xs ${
+                          isDone
+                            ? "text-green-700"
+                            : isActive
+                            ? "text-blue-700"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {s.message}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <LEDStatusDisplay orderId={currentUserOrder.orderId} />
-                )}
+                  );
+                })}
               </div>
-            )}
+            </div>
 
             {/* Progress Bar */}
             <div className="mb-8">

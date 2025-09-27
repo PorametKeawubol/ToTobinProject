@@ -13,8 +13,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const queue = await queueService.getQueueStatus();
-    const order = queue.find((o) => o.orderId === orderId);
+    // Get order by orderId (includes completed)
+    const order = await queueService.getOrderByOrderId(orderId);
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -29,11 +29,11 @@ export async function GET(request: NextRequest) {
     let message = "รอเครื่องทำเครื่องดื่ม";
 
     if (order.status === "preparing" || order.status === "brewing") {
-      const completedSteps = brewingSteps.filter(
-        (step) => step.status === "completed"
-      );
+      // Count unique steps seen to reflect simulator events (in_progress or completed)
+      const seenSteps = new Set(brewingSteps.map((s) => s.step));
       const totalSteps = 5; // preparing_cup, adding_toppings, adding_ice, brewing_drink, completed
-      progress = Math.round((completedSteps.length / totalSteps) * 100);
+      const completedCount = Math.min(totalSteps, seenSteps.size);
+      progress = Math.round((completedCount / totalSteps) * 100);
 
       // Get current step from latest brewing step
       const latestStep = brewingSteps[brewingSteps.length - 1];
@@ -54,14 +54,21 @@ export async function GET(request: NextRequest) {
     // Calculate estimated remaining time
     let estimatedTime = 0;
     if (order.status === "preparing" || order.status === "brewing") {
-      const elapsedSteps = brewingSteps.filter(
-        (step) => step.status === "completed"
-      ).length;
-      const remainingSteps = 5 - elapsedSteps;
+      const seenSteps = new Set(brewingSteps.map((s) => s.step));
+      const remainingSteps = Math.max(0, 5 - seenSteps.size);
       estimatedTime = remainingSteps * 20; // 20 seconds per step
     } else if (order.status === "pending") {
       estimatedTime = order.estimatedTime * 60; // Convert minutes to seconds
     }
+
+    // Build ledState for UI based on latest step
+    const ledState = {
+      preparing: currentStep === "preparing_cup",
+      toppings: currentStep === "adding_toppings",
+      ice: currentStep === "adding_ice",
+      brewing: currentStep === "brewing_drink",
+      completed: currentStep === "completed",
+    };
 
     return NextResponse.json({
       success: true,
@@ -76,6 +83,7 @@ export async function GET(request: NextRequest) {
         drinkName: order.order.drinkName,
         toppings: order.order.toppings,
         totalAmount: order.order.totalAmount,
+        ledState,
       },
       brewingSteps: brewingSteps.map((step) => ({
         step: step.step,

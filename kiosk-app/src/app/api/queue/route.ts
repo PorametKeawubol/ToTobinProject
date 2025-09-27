@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
       success: true,
       queue: queue.map((order) => ({
         id: order.id,
+        orderId: order.orderId,
+        // Use the queuePosition from the order itself (consistent with service)
         queuePosition: order.queuePosition,
         status: order.status,
         estimatedTime: order.estimatedTime,
@@ -52,9 +54,11 @@ export async function POST(request: NextRequest) {
       success: true,
       queueOrder: {
         id: queueOrder.id,
+        orderId: queueOrder.orderId,
         queuePosition: queueOrder.queuePosition,
         estimatedTime: queueOrder.estimatedTime,
         status: queueOrder.status,
+        drinkName: queueOrder.order.drinkName,
       },
     });
   } catch (error) {

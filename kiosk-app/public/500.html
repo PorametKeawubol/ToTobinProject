@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Server Error - TotoBin Kiosk</title>
+ <style>
+  body {
+   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+   margin: 0;
+   padding: 0;
+   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+   min-height: 100vh;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+  }
+
+  .container {
+   text-align: center;
+   background: white;
+   padding: 3rem;
+   border-radius: 20px;
+   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+   max-width: 500px;
+   margin: 2rem;
+  }
+
+  .error-code {
+   font-size: 6rem;
+   font-weight: bold;
+   color: #e74c3c;
+   margin: 0;
+   line-height: 1;
+  }
+
+  .error-title {
+   font-size: 2rem;
+   color: #2c3e50;
+   margin: 1rem 0;
+  }
+
+  .error-message {
+   color: #7f8c8d;
+   font-size: 1.1rem;
+   margin-bottom: 2rem;
+   line-height: 1.6;
+  }
+
+  .btn {
+   background: #3498db;
+   color: white;
+   padding: 1rem 2rem;
+   border: none;
+   border-radius: 10px;
+   font-size: 1.1rem;
+   cursor: pointer;
+   text-decoration: none;
+   display: inline-block;
+   transition: background 0.3s;
+  }
+
+  .btn:hover {
+   background: #2980b9;
+  }
+
+  .icon {
+   font-size: 4rem;
+   margin-bottom: 1rem;
+  }
+ </style>
+</head>
+
+<body>
+ <div class="container">
+  <div class="icon">⚠️</div>
+  <h1 class="error-code">500</h1>
+  <h2 class="error-title">เกิดข้อผิดพลาดของเซิร์ฟเวอร์</h2>
+  <p class="error-message">
+   ขออภัยในความไม่สะดวก ระบบกำลังประสบปัญหาชั่วคราว<br>
+   กรุณาลองใหม่อีกครั้งในสักครู่
+  </p>
+  <a href="/" class="btn">กลับหน้าแรก</a>
+ </div>
+</body>
+
+</html>

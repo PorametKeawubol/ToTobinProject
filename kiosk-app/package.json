@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "hardware:sim": "node scripts/hardware-sim.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

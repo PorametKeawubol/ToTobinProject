@@ -14,15 +14,35 @@ export async function GET(request: NextRequest) {
       const sendQueueUpdate = async () => {
         try {
           const queue = await queueService.getQueueStatus();
+          console.log(`SSE sending queue update: ${queue.length} orders`, {
+            timestamp: new Date().toISOString(),
+            orders: queue.map(q => ({
+              id: q.id,
+              orderId: q.orderId,
+              status: q.status,
+              queuePosition: q.queuePosition,
+              hardwareId: q.hardwareId,
+              createdAt: q.createdAt.toISOString()
+            }))
+          });
+          
           const data = JSON.stringify({
             type: "queue-update",
             data: {
               queue: queue.map((order) => ({
+                ...order,
+                // Ensure all necessary fields are included
                 id: order.id,
+                orderId: order.orderId,
                 queuePosition: order.queuePosition,
                 status: order.status,
                 estimatedTime: order.estimatedTime,
-                drinkName: order.order.drinkName,
+                createdAt: order.createdAt,
+                order: order.order,
+                customer: order.customer,
+                startedAt: order.startedAt,
+                completedAt: order.completedAt,
+                hardwareId: order.hardwareId,
               })),
               totalInQueue: queue.length,
               timestamp: new Date().toISOString(),
@@ -39,7 +59,7 @@ export async function GET(request: NextRequest) {
       sendQueueUpdate();
 
       // Setup periodic updates
-      const interval = setInterval(sendQueueUpdate, 2000); // Update every 2 seconds
+      const interval = setInterval(sendQueueUpdate, 1000); // Update every 1 second for faster updates
 
       // Heartbeat to keep connection alive
       const heartbeat = setInterval(() => {
