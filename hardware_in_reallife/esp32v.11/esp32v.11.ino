@@ -7,15 +7,17 @@
 /* =======================
  *  เซตฮาร์ดแวร์ / พิน
  * =======================*/
-Servo cupServo;            // เซอร์โวถาดหลัก G13
-Servo prepServo1;          // เซอร์โวเตรียมแก้ว G23
-Servo prepServo2;          // เซอร์โวเตรียมแก้ว G22
+Servo cupServo;            // เซอร์โวถาดหลัก G13 (continuous-rotation)
+Servo prepServo1;          // เซอร์โวเตรียมแก้ว G23 (มาตรฐานองศา)
+Servo prepServo2;          // เซอร์โวเตรียมแก้ว G22 (มาตรฐานองศา)
+Servo toppingServo;        // เซอร์โว topping G15 (มาตรฐานองศา)
 
-const int SERVO_PIN   = 13;  // PWM servo (ถาด)
-const int PREP_PIN_1  = 23;  // เซอร์โวเตรียมแก้วตัวที่ 1
-const int PREP_PIN_2  = 22;  // เซอร์โวเตรียมแก้วตัวที่ 2
+const int SERVO_PIN   = 13;  // ถาด
+const int PREP_PIN_1  = 23;  // เตรียมแก้ว #1
+const int PREP_PIN_2  = 22;  // เตรียมแก้ว #2
+const int TOPPING_SERVO_PIN = 15; // topping (S3)
 
-// เซอร์โวหมุนรอบ (continuous rotation) — ปรับได้ตามรุ่นของคุณ (เซอร์โวถาด)
+// เซอร์โวถาด (continuous rotation)
 const int SERVO_US_CCW  = 1700;   // ทวนเข็ม (>1500)
 const int SERVO_US_STOP = 1500;   // หยุด
 const int SERVO_US_CW   = 2000;   // ตามเข็ม
@@ -26,106 +28,40 @@ inline void servoCW()   { cupServo.writeMicroseconds(SERVO_US_CW);  }
 
 /* =======================
  *  SENSORS
- *  - S1, S2 = Ultrasonic
- *  - S3, S4 = TCRT (Active-Low)
  * =======================*/
-
-/* --- Ultrasonic (S1,S2) --- */
-// Mapping (ตัวอย่างการต่อจริง ให้ยึดตามที่คุณใช้):
 // S1 = TRIG G16, ECHO G17   |  S2 = TRIG G19, ECHO G18
 const int ULTRA1_TRIG = 16;
 const int ULTRA1_ECHO = 17;
 const int ULTRA2_TRIG = 19;
 const int ULTRA2_ECHO = 18;
 
-const float SOUND_CM_PER_US = 0.0343f;          // ~0.0343 cm/us (ที่ ~20-25°C)
-const unsigned long ULTRA_TIMEOUT_US = 30000UL; // 30ms (~5m) เผื่อไว้
+const float SOUND_CM_PER_US = 0.0343f;
+const unsigned long ULTRA_TIMEOUT_US = 30000UL;
 
-// >>> เกณฑ์ระยะของแต่ละตัว
-const float ULTRA1_THRESHOLD_CM = 10.5f;  // S1 ทริก ≤ 11.5 ซม.
-const float ULTRA2_THRESHOLD_CM = 10.0f;  // S2 ทริก ≤ 12 ซม. (ใช้ใน whichSensor เท่านั้น)
+// เกณฑ์
+const float ULTRA1_THRESHOLD_CM = 11.5f;  // ใช้ใน whichSensor()
+const float ULTRA2_THRESHOLD_CM = 10.5f;
+
+// เริ่มงานถ้าหน้า S1 ใกล้มากตั้งแต่แรก
+const float START_US1_SKIP_CM = 30.0f;
 
 // ===== Preparing-cup (S2) rules =====
-const float PREP_NEAR_CM = 3.8f;            // ต้องใกล้กว่า 4 ซม. จึงถือว่ามีแก้ว
+const float PREP_NEAR_CM = 5.0f;            // ต้องใกล้กว่า 4 ซม.
 const unsigned long PREP_CONFIRM_MS = 2000; // ค้างยืนยัน 2 วิ
 
-// ===== โมชันของเซอร์โวเตรียมแก้ว (G23/G22) =====
+// ===== โมชันเซอร์โวเตรียมแก้ว =====
 int prep_pos = 0;
-const uint8_t prep_stepSize   = 10;   // ก้าวหมุนทีละ 10°
-const unsigned long prep_stepDelayMs = 20;   // หน่วงต่อก้าว
-int shakeAmplitude = 80;   // แกว่งรวม 80° (±40°)
-int shakeDelay    = 150;   // หน่วงต่อการแกว่งครั้งละฝั่ง (ms)
-int shakeTimes    = 5;     // จำนวนครั้งต่อรอบเขย่า
+const uint8_t prep_stepSize   = 10;
+const unsigned long prep_stepDelayMs = 20;
+int shakeAmplitude = 80;   // ±40°
+int shakeDelay    = 150;
+int shakeTimes    = 5;
+const int PREP_HOME_DEG = 0;
 
-float readUltrasonicCm(int trigPin, int echoPin) {
-  // ป้องกัน echo ติดค้าง
-  pinMode(echoPin, INPUT);
-  pinMode(trigPin, OUTPUT);
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(3);
-
-  // ส่งทริก 10us
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  // วัดช่วงเวลาพัลส์
-  unsigned long dur = pulseIn(echoPin, HIGH, ULTRA_TIMEOUT_US);
-  if (dur == 0) return NAN;  // time out
-
-  // ระยะทาง (ไป-กลับ) ⇒ /2
-  float cm = (dur * SOUND_CM_PER_US) / 2.0f;
-  return cm;
-}
-
-// อ่านหลายครั้งแล้วหา "ค่าเฉลี่ย" เพื่อความนิ่ง
-float readUltrasonicAverageCm(int trigPin, int echoPin, int samples = 5, int gapMs = 40) {
-  float sum = 0.0f;
-  int cnt = 0;
-  for (int i = 0; i < samples; ++i) {
-    float v = readUltrasonicCm(trigPin, echoPin);
-    if (!isnan(v)) {
-      sum += v;
-      cnt++;
-    }
-    delay(gapMs);
-    yield();
-  }
-  if (cnt == 0) return NAN;
-  return sum / cnt;
-}
-
-bool ultrasonicTriggered(int trigPin, int echoPin, float thresholdCm) {
-  float cm = readUltrasonicCm(trigPin, echoPin);
-  if (isnan(cm)) return false;
-  return (cm <= thresholdCm);
-}
-
-/* --- TCRT (S3,S4) --- */
-const int  TCRT_S3 = 27;   // G27
-const int  TCRT_S4 = 26;   // G26
-const bool TCRT_ACTIVE_LOW = true;
-const unsigned long TCRT_DEBOUNCE_MS = 30;
-
-inline bool tcrtRaw(int pin) {
-  int v = digitalRead(pin);
-  return TCRT_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
-}
-
-/* Which sensor hit?
- * - 1 = Ultrasonic S1 (ระยะ ≤ ULTRA1_THRESHOLD_CM)
- * - 2 = Ultrasonic S2 (ระยะ ≤ ULTRA2_THRESHOLD_CM)
- * - 3 = TCRT S3 (G27) Active-Low
- * - 4 = TCRT S4 (G26) Active-Low
- * - 0 = none
- */
-int whichSensor() {
-  if (ultrasonicTriggered(ULTRA1_TRIG, ULTRA1_ECHO, ULTRA1_THRESHOLD_CM)) return 1;
-  if (ultrasonicTriggered(ULTRA2_TRIG, ULTRA2_ECHO, ULTRA2_THRESHOLD_CM)) return 2;
-  if (tcrtRaw(TCRT_S3)) return 3;
-  if (tcrtRaw(TCRT_S4)) return 4;
-  return 0;
-}
+// ===== topping (S3) =====
+const int TOPPING_MIN_DEG   = 10;
+const int TOPPING_MAX_DEG   = 55;
+const unsigned long TOPPING_PULSE_MS = 300;
 
 /* =======================
  *  Wi-Fi / API config
@@ -142,6 +78,9 @@ const char* API_KEY     = "odroid-hardware-key-1758367749";
 const unsigned long POLL_IDLE_MS   = 2000;
 const unsigned long POLL_ERROR_MS  = 5000;
 const unsigned long LOG_EVERY_MS   = 250;
+
+// ป้องกัน “หมุนไม่หยุด” ระหว่างหา marker
+const unsigned long FIND_TIMEOUT_MS = 30000;  // 30 วินาที
 
 /* =======================
  *  HTTP helpers
@@ -170,7 +109,7 @@ void connectWiFi() {
 }
 
 bool httpBeginWithCommon(const String& url) {
-  secureClient.setInsecure();   // DEV: ข้าม cert; โปรดักชันควร setCACert()
+  secureClient.setInsecure();
   http.setTimeout(15000);
   return http.begin(secureClient, url);
 }
@@ -237,14 +176,73 @@ bool pollNextOrder(String& orderId, int& queuePos) {
   return true;
 }
 
-/* ส่ง progress */
+/* =======================
+ *  Ultrasonic helpers
+ * =======================*/
+float readUltrasonicCm(int trigPin, int echoPin) {
+  pinMode(echoPin, INPUT);
+  pinMode(trigPin, OUTPUT);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(3);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  unsigned long dur = pulseIn(echoPin, HIGH, ULTRA_TIMEOUT_US);
+  if (dur == 0) return NAN;
+  float cm = (dur * SOUND_CM_PER_US) / 2.0f;
+  return cm;
+}
+
+float readUltrasonicAverageCm(int trigPin, int echoPin, int samples = 5, int gapMs = 40) {
+  float sum = 0.0f;
+  int cnt = 0;
+  for (int i = 0; i < samples; ++i) {
+    float v = readUltrasonicCm(trigPin, echoPin);
+    if (!isnan(v)) { sum += v; cnt++; }
+    delay(gapMs);
+    yield();
+  }
+  if (cnt == 0) return NAN;
+  return sum / cnt;
+}
+
+bool ultrasonicTriggered(int trigPin, int echoPin, float thresholdCm) {
+  float cm = readUltrasonicCm(trigPin, echoPin);
+  if (isnan(cm)) return false;
+  return (cm <= thresholdCm);
+}
+
+/* --- TCRT (S3,S4) --- */
+const int  TCRT_S3 = 27;   // G27
+const int  TCRT_S4 = 26;   // G26
+const bool TCRT_ACTIVE_LOW = true;
+const unsigned long TCRT_DEBOUNCE_MS = 30;
+
+inline bool tcrtRaw(int pin) {
+  int v = digitalRead(pin);
+  return TCRT_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+}
+
+/* Which sensor hit? */
+int whichSensor() {
+  if (ultrasonicTriggered(ULTRA1_TRIG, ULTRA1_ECHO, ULTRA1_THRESHOLD_CM)) return 1;
+  if (ultrasonicTriggered(ULTRA2_TRIG, ULTRA2_ECHO, ULTRA2_THRESHOLD_CM)) return 2;
+  if (tcrtRaw(TCRT_S3)) return 3;
+  if (tcrtRaw(TCRT_S4)) return 4;
+  return 0;
+}
+
+/* =======================
+ *  Progress API
+ * =======================*/
 bool postProgressExtended(const String& orderId,
                           const String& step,
                           const String& status,
                           const String& message,
                           bool tcrtHit,
                           const char* eventTag,
-                          int sensorIndex /*1..4, 0=unknown*/) {
+                          int sensorIndex) {
   { // main
     DynamicJsonDocument doc(2048);
     doc["orderId"]     = orderId;
@@ -293,7 +291,7 @@ bool postProgressExtended(const String& orderId,
 }
 
 /* =======================
- *  Helper: รอเซนเซอร์ที่ “ระบุหมายเลข” ให้ชน แล้วหยุด/ดีเลย์ตามต้องการ
+ *  Helper: รอเซนเซอร์เป้าหมาย + เพิ่ม timeout
  * =======================*/
 bool waitForSensorHitSequence(const String& orderId,
                               int targetSensor,
@@ -303,11 +301,18 @@ bool waitForSensorHitSequence(const String& orderId,
   Serial.printf("[seq] Waiting for S%d ...\n", targetSensor);
   servoCCW();
   unsigned long tLastLog = 0;
+  unsigned long tStart = millis();
 
   while (true) {
+    // timeout กันหมุนยาว
+    if (millis() - tStart > FIND_TIMEOUT_MS) {
+      Serial.printf("[seq] Timeout waiting S%d → STOP\n", targetSensor);
+      servoStop();
+      return false;
+    }
+
     int w = whichSensor();
     if (w == targetSensor) {
-      // debounce: ต้องคงอยู่ >= TCRT_DEBOUNCE_MS
       unsigned long pressedAt = millis();
       while ( (whichSensor() == targetSensor) && (millis() - pressedAt < TCRT_DEBOUNCE_MS) ) {
         delay(1);
@@ -322,8 +327,16 @@ bool waitForSensorHitSequence(const String& orderId,
           (void)postProgressExtended(orderId, reportStep, "in_progress",
                                      String(reportStep) + " (sensor S" + targetSensor + ")",
                                      true, "marker_hit", targetSensor);
+
+          // ถ้าเป็น S3 → topping servo pulse 10°→55°(0.3s)→10°
+          if (targetSensor == 3 && reportStep && String(reportStep) == "adding_toppings") {
+            toppingServo.write(TOPPING_MAX_DEG);
+            delay(TOPPING_PULSE_MS);
+            toppingServo.write(TOPPING_MIN_DEG);
+          }
+
           delay(stopMs);
-          servoCCW();  // หมุนต่อ
+          servoCCW();
           return true;
         }
       }
@@ -344,54 +357,46 @@ bool waitForSensorHitSequence(const String& orderId,
 }
 
 /* =======================
- *  NEW (สำหรับ S2): เซอร์โว G23/G22 วิ่งเฉพาะตอนเตรียมแก้ว
- *  - ถึง S2 → หยุดถาด + แจ้ง preparing_cup
- *  - ระหว่างยังไม่มีแก้ว (ULTRA2 >= 4 ซม.) → หมุนไปถึง 180° แล้ว "เขย่า" ไป–มา
- *  - เมื่อ ULTRA2 < 4 ซม. คอนเฟิร์ม 2 วิ → หยุดเซอร์โว G23/G22 และหมุนถาดต่อ
+ *  S2 (preparing_cup)
  * =======================*/
-const int PREP_HOME_DEG = 0;  // องศาเริ่มต้น
 void prepServosWriteBoth(int deg) {
   prepServo1.write(deg);
   prepServo2.write(deg);
 }
 
-// วิ่งจาก prep_pos ไปยัง target แบบเป็นขั้น ๆ
 void prepServosMoveTo(int targetDeg, int step = 10, unsigned long stepDelay = 20) {
   if (targetDeg < 0) targetDeg = 0;
   if (targetDeg > 180) targetDeg = 180;
-
   while (prep_pos != targetDeg) {
     if (prep_pos < targetDeg) prep_pos += step;
     else                      prep_pos -= step;
-
     if (prep_pos < 0)   prep_pos = 0;
     if (prep_pos > 180) prep_pos = 180;
-
     prepServosWriteBoth(prep_pos);
     delay(stepDelay);
     yield();
   }
 }
 
-void prepServosStop() {
-  // สำหรับ SG90/STD servo แค่ค้างองศาปัจจุบัน; ถ้าเป็น continuous ให้คุม writeMicroseconds(1500)
-  // ที่นี่ใช้แบบมาตรฐานองศา:
-  // ไม่ต้องทำอะไรเพิ่มเติมก็ได้ หรือจะคงที่ pos ปัจจุบัน
-}
-
 bool gotoAndPrepareAtS2(const String& orderId) {
   Serial.println("[prep] Seeking S2 ...");
   servoCCW();
   unsigned long tLastLog = 0;
+  unsigned long tStart = millis();
 
-  // หมุนหา S2
+  // หมุนหา S2 (มี timeout กันหมุนยาว)
   while (true) {
+    if (millis() - tStart > FIND_TIMEOUT_MS) {
+      Serial.println("[prep] Timeout seeking S2 → STOP");
+      servoStop();
+      return false;
+    }
+
     int w = whichSensor();
     if (w == 2) {
       unsigned long hitAt = millis();
       while ((whichSensor() == 2) && (millis() - hitAt < TCRT_DEBOUNCE_MS)) { delay(1); }
       if (millis() - hitAt >= TCRT_DEBOUNCE_MS) {
-        // พบ S2 → หยุดถาด + แจ้งเริ่ม preparing_cup
         servoStop();
         (void)postProgressExtended(orderId, "preparing_cup", "in_progress",
                                    "หยุดเพื่อเตรียมแก้ว (S2)", true, "marker_hit", 2);
@@ -411,26 +416,23 @@ bool gotoAndPrepareAtS2(const String& orderId) {
     yield();
   }
 
-  // === เริ่มควบคุมเซอร์โวเตรียมแก้ว (G23/G22) ===
+  // === ควบคุม G23/G22 ระหว่างรอแก้วเข้าใกล้ ===
   prep_pos = 0;
   prepServosWriteBoth(prep_pos);
 
   Serial.printf("[prep] Waiting ULTRA2 < %.1f cm then hold %lu ms (servos active)\n", PREP_NEAR_CM, PREP_CONFIRM_MS);
 
   while (true) {
-    // อ่านระยะ
     float nowAvg = readUltrasonicAverageCm(ULTRA2_TRIG, ULTRA2_ECHO, 4, 25);
 
-    // ถ้ายังไม่มีแก้ว → ขยับเซอร์โวตามพฤติกรรมตัวอย่าง
+    // ยังไม่มีแก้ว → ค่อย ๆ ไป 180° แล้วเขย่า
     if (isnan(nowAvg) || nowAvg >= PREP_NEAR_CM) {
-      // 1) ค่อย ๆ ไต่ไปจนถึง 180°
       if (prep_pos < 180) {
         prep_pos += prep_stepSize;
         if (prep_pos > 180) prep_pos = 180;
         prepServosWriteBoth(prep_pos);
         delay(prep_stepDelayMs);
       } else {
-        // 2) ถึง 180 แล้ว → เขย่าไป–มา
         int halfAmp = shakeAmplitude / 2;
         for (int i = 0; i < shakeTimes; i++) {
           prepServosWriteBoth(prep_pos - halfAmp);
@@ -438,11 +440,9 @@ bool gotoAndPrepareAtS2(const String& orderId) {
           prepServosWriteBoth(prep_pos + halfAmp);
           delay(shakeDelay);
         }
-        // กลับตำแหน่งเดิมที่ 180
         prepServosWriteBoth(prep_pos);
       }
 
-      // debug log เป็นช่วง ๆ
       static unsigned long lastLog = 0;
       if (millis() - lastLog >= 300) {
         lastLog = millis();
@@ -451,22 +451,18 @@ bool gotoAndPrepareAtS2(const String& orderId) {
                       PREP_NEAR_CM, prep_pos);
       }
     } else {
-      // มีแก้วเข้ามาแล้ว → คอนเฟิร์ม 2 วิ
+      // มีแก้ว → คอนเฟิร์ม 2 วิ
       Serial.printf("[prep] near %.1f cm detected → confirming...\n", nowAvg);
       delay(PREP_CONFIRM_MS);
-      // อ่านซ้ำยืนยัน
       float confirm = readUltrasonicAverageCm(ULTRA2_TRIG, ULTRA2_ECHO, 4, 25);
       if (!isnan(confirm) && confirm < PREP_NEAR_CM) {
-        // วิ่งกลับจุดเริ่มต้นอย่างนุ่ม ๆ แล้วค่อยไปต่อ
         Serial.println("[prep] confirmed cup present → homing prep servos...");
-        prepServosMoveTo(PREP_HOME_DEG, /*step*/10, /*delay*/20);
+        prepServosMoveTo(PREP_HOME_DEG, 10, 20);
         Serial.println("[prep] homed → continue to next step");
-
-        // หมุนถาดไปขั้นถัดไป
         servoCCW();
         return true;
       } else {
-        Serial.println("[prep] confirm failed (not near anymore), keep working...");
+        Serial.println("[prep] confirm failed, keep working...");
       }
     }
 
@@ -476,32 +472,25 @@ bool gotoAndPrepareAtS2(const String& orderId) {
 }
 
 /* =======================
- *  รอให้ลูกค้ายกแก้วออกหลัง brewing_drink (ULTRA1 เพิ่ม ≥ 4 ซม.)
+ *  หลัง brewing_drink: รอให้ ULTRA1 เพิ่ม ≥ 4 ซม. → completed
  * =======================*/
 void waitForPickupAfterBrew(const String& orderId, float pickupDeltaCm = 4.0f) {
-  // หยุดมอเตอร์ก่อนวัด
   servoStop();
-
-  // อ่าน baseline
   Serial.println("[pickup] Measuring baseline on ULTRA1...");
   float baseline = NAN;
   for (int attempt = 0; attempt < 3 && isnan(baseline); ++attempt) {
     baseline = readUltrasonicAverageCm(ULTRA1_TRIG, ULTRA1_ECHO, 8, 35);
   }
   if (isnan(baseline)) baseline = readUltrasonicCm(ULTRA1_TRIG, ULTRA1_ECHO);
-
   Serial.printf("[pickup] baseline= %s cm\n", isnan(baseline) ? "NaN" : String(baseline, 1).c_str());
 
   unsigned long tLastLog = 0;
-
   while (true) {
     float nowAvg = readUltrasonicAverageCm(ULTRA1_TRIG, ULTRA1_ECHO, 3, 30);
-
     if (isnan(baseline) && !isnan(nowAvg)) {
       baseline = nowAvg;
       Serial.printf("[pickup] baseline recovered = %.1f cm\n", baseline);
     }
-
     bool picked = (!isnan(baseline) && !isnan(nowAvg)) ? ((nowAvg - baseline) >= pickupDeltaCm) : false;
 
     if (millis() - tLastLog >= 300) {
@@ -534,24 +523,43 @@ void brew(const String& orderId) {
 
   // เริ่ม
   (void)postProgressExtended(orderId, "start", "in_progress", "เริ่มต้น", false, "step_started", 0);
-  servoCCW();
 
-  // S1 (Ultrasonic #1) → ข้าม
-  waitForSensorHitSequence(orderId, 1, 0, "", true);
+  // --- NEW: เช็ค ULTRA1 ตอนเริ่ม ถ้าใกล้มาก (<30cm) ให้ "ข้าม S1" ทันที ---
+  float us1Start = readUltrasonicAverageCm(ULTRA1_TRIG, ULTRA1_ECHO, 3, 25);
+  Serial.printf("[start] US1 start = %s cm\n", isnan(us1Start) ? "NaN" : String(us1Start,1).c_str());
 
-  // S2 (Ultrasonic #2) → หยุดถาด + เซอร์โว G23/G22 ทำงานจนมีแก้วเข้าใกล้ < 4 ซม. (คอนเฟิร์ม 2 วิ) → หมุนต่อ
-  gotoAndPrepareAtS2(orderId);
+  if (!isnan(us1Start) && us1Start < START_US1_SKIP_CM) {
+    Serial.println("[start] US1 < 30cm → skip S1 and go preparing_cup (S2)");
+    // ไปหา S2 เลย (ฟังก์ชันนี้จะสั่งหมุนเอง)
+    if (!gotoAndPrepareAtS2(orderId)) {
+      // ถ้าหา S2 ไม่เจอในเวลา → ป้องกันค้าง
+      Serial.println("[start] Could not reach S2 in time, aborting this cycle.");
+      servoStop();
+      return;
+    }
+  } else {
+    // ปกติ: หมุนและรอชน S1 (skip) แต่มี timeout
+    if (!waitForSensorHitSequence(orderId, 1, 0, "", true)) {
+      Serial.println("[start] S1 wait timeout → continue to S2 anyway");
+    }
+    // จากนั้นเข้าสเต็ป S2 ตามปกติ
+    if (!gotoAndPrepareAtS2(orderId)) {
+      Serial.println("[start] Could not reach S2 in time, aborting this cycle.");
+      servoStop();
+      return;
+    }
+  }
 
-  // S3 (TCRT G27) →หยุด + adding_toppings
+  // S3 → หยุด + adding_toppings (สั่ง G15 10°→55°(0.3s)→10° ภายใน waitForSensorHitSequence)
   waitForSensorHitSequence(orderId, 3, HOLD_MS, "adding_toppings", false);
 
-  // S4 (TCRT G26) →หยุด + adding_ice
+  // S4 → หยุด + adding_ice
   waitForSensorHitSequence(orderId, 4, HOLD_MS, "adding_ice", false);
 
-  // S1 (Ultrasonic #1) →หยุด + brewing_drink
+  // S1 → หยุด + brewing_drink
   waitForSensorHitSequence(orderId, 1, HOLD_MS, "brewing_drink", false);
 
-  // หลัง brewing_drink: รอให้ลูกค้ายกแก้ว (ULTRA1 เพิ่ม ≥ 4 ซม.) → completed
+  // รอให้ลูกค้ายกแก้ว (ULTRA1 เพิ่ม ≥ 4 ซม.) → completed
   waitForPickupAfterBrew(orderId, 4.0f);
 
   // เสร็จแล้วหยุด
@@ -576,16 +584,25 @@ void setup() {
   digitalWrite(ULTRA1_TRIG, LOW);
   digitalWrite(ULTRA2_TRIG, LOW);
 
-  // TCRT pins (Active-Low)
+  // TCRT pins
   pinMode(TCRT_S3, INPUT_PULLUP);
   pinMode(TCRT_S4, INPUT_PULLUP);
 
-  // Attach servos
+  // --- สำคัญ: ตั้งความถี่/ช่วงพัลส์ + หยุดเซอร์โวทันทีหลัง attach เพื่อลดการหมุนตอนรีเซต ---
+  cupServo.setPeriodHertz(50);
   cupServo.attach(SERVO_PIN, 500, 2500);
-  prepServo1.attach(PREP_PIN_1); // เซอร์โวมาตรฐานองศา
-  prepServo2.attach(PREP_PIN_2);
-  prepServosWriteBoth(0);        // เริ่มที่ 0°
-  servoStop();                   // ถาดหยุด
+  servoStop(); // หยุดไว้ก่อน
+
+  prepServo1.attach(PREP_PIN_1, 500, 2500);
+  prepServo2.attach(PREP_PIN_2, 500, 2500);
+
+  toppingServo.setPeriodHertz(50);
+  toppingServo.attach(TOPPING_SERVO_PIN, 500, 2500);
+  toppingServo.write(TOPPING_MIN_DEG);
+
+  // ตำแหน่งเริ่มต้นของ G23/G22
+  prep_pos = 0;
+  prepServosWriteBoth(0);
 
   connectWiFi();
 }
