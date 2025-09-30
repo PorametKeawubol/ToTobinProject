@@ -10,22 +10,22 @@
 Servo cupServo;            // เซอร์โวถาดหลัก G13 (continuous-rotation)
 Servo prepServo1;          // เซอร์โวเตรียมแก้ว G23 (มาตรฐานองศา)
 Servo prepServo2;          // เซอร์โวเตรียมแก้ว G22 (มาตรฐานองศา)
-Servo toppingServo;        // เซอร์โว topping ที่ GPIO2 (แนวทางกันกระตุก: attach เฉพาะตอนใช้)
-Servo iceServo;            // เซอร์โวสำหรับน้ำแข็ง G15 (แนวทางเดียวกัน)
+Servo toppingServo;        // เซอร์โว topping ที่ GPIO2 (attach เฉพาะตอนใช้)
+Servo iceServo;            // เซอร์โวสำหรับน้ำแข็ง G15 (attach เฉพาะตอนใช้)
 
 const int SERVO_PIN   = 13;  // ถาด
 const int PREP_PIN_1  = 23;  // เตรียมแก้ว #1
 const int PREP_PIN_2  = 22;  // เตรียมแก้ว #2
-const int TOPPING_SERVO_PIN = 2;   // topping (S3) → ใช้ attach/detach on-demand
-const int ICE_SERVO_PIN     = 15;  // ice (S4) → ใช้ attach/detach on-demand
+const int TOPPING_SERVO_PIN = 2;   // topping (S3)
+const int ICE_SERVO_PIN     = 15;  // ice (S4)
 
-// พินควบคุมตอน brewing_drink (สั่ง LOW 5 วิ)
-const int BREW_CTRL_PIN      = 33;
-const bool BREW_ACTIVE_LEVEL = LOW;           // ต้องการลอจิก 0 ตอนทำงาน
-const unsigned long BREW_PULSE_MS = 5000;     // ค้าง 5 วินาที
+// พินควบคุมตอน “เติมน้ำเชื่อม/น้ำ” (สั่ง ACTIVE = LOW เป็นเวลาตามความหวาน)
+const int  BREW_CTRL_PIN       = 33;
+const bool BREW_ACTIVE_LEVEL   = LOW;           // ต้องการลอจิก 0 ตอนทำงาน
+const unsigned long BREW_PULSE_MAX_MS = 2000;   // 100% = 2000ms
 
 // เซอร์โวถาด (continuous rotation)
-const int SERVO_US_CCW  = 1700;   // ทวนเข็ม (>1500)
+const int SERVO_US_CCW  = 1600;   // ทวนเข็ม (>1500)
 const int SERVO_US_STOP = 1500;   // หยุด
 const int SERVO_US_CW   = 2000;   // ตามเข็ม
 
@@ -97,6 +97,14 @@ const unsigned long LOG_EVERY_MS   = 250;
 const unsigned long FIND_TIMEOUT_MS = 30000;  // 30 วินาที
 
 /* =======================
+ *  สถานะออเดอร์ปัจจุบัน
+ * =======================*/
+String g_orderId;
+bool   g_needIce     = false;  // มี "น้ำแข็ง" ใน toppings
+bool   g_needPearls  = false;  // มี "ไข่มุก" ใน toppings
+int    g_sweetness   = 100;    // 0..100
+
+/* =======================
  *  HTTP helpers
  * =======================*/
 WiFiClientSecure secureClient;
@@ -151,6 +159,24 @@ bool postJson(const String& url, const String& json,
   return (code >= 200 && code < 300);
 }
 
+/* ตรวจชื่อท็อปปิ้ง (ไทย/อังกฤษ) */
+bool isIceWord(const String& s) {
+  String t = s; t.toLowerCase();
+  return (t.indexOf("น้ำแข็ง") >= 0) || (t.indexOf("ice") >= 0);
+}
+bool isPearlWord(const String& s) {
+  String t = s; t.toLowerCase();
+  return (t.indexOf("ไข่มุก") >= 0) || (t.indexOf("pearl") >= 0) || (t.indexOf("boba") >= 0) || (t.indexOf("tapioca") >= 0);
+}
+
+/* เวลาเติมน้ำเชื่อมตามความหวาน: 0..100 → 0..2000ms (เชิงเส้น) */
+unsigned long brewMsFromSweetness(int sweetness) {
+  if (sweetness < 0) sweetness = 0;
+  if (sweetness > 100) sweetness = 100;
+  return (unsigned long)((sweetness * BREW_PULSE_MAX_MS) / 100);
+}
+
+/* ดึงออเดอร์ + ตั้งค่าสถานะ */
 bool pollNextOrder(String& orderId, int& queuePos) {
   String url = String(BASE_URL) + "/api/hardware/orders?hardwareId=" + HARDWARE_ID;
 
@@ -171,22 +197,52 @@ bool pollNextOrder(String& orderId, int& queuePos) {
 
   String payload = http.getString();
   http.end();
-  Serial.printf("[sim] poll payload: %s\n", payload.substring(0, 200).c_str());
+  Serial.printf("[sim] Poll response: %s\n", payload.c_str());
 
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(4096);
   auto err = deserializeJson(doc, payload);
   if (err) {
     Serial.printf("[sim] JSON parse error (orders): %s\n", err.c_str());
     return false;
   }
 
-  if (!doc["order"].isNull() && doc["order"]["orderId"].is<const char*>()) {
-    orderId  = String(doc["order"]["orderId"].as<const char*>());
-    queuePos = doc["order"]["queuePosition"] | -1;
-    return true;
-  }
-  orderId = "";
+  orderId  = "";
   queuePos = -1;
+  g_needIce = false;
+  g_needPearls = false;
+  g_sweetness = 100;
+
+  JsonObject ord = doc["order"];
+  if (!ord.isNull()) {
+    if (ord["orderId"].is<const char*>()) {
+      orderId  = String(ord["orderId"].as<const char*>());
+    }
+    queuePos = ord["queuePosition"] | -1;
+
+    // toppings[]
+    if (ord["toppings"].is<JsonArray>()) {
+      for (JsonVariant v : ord["toppings"].as<JsonArray>()) {
+        if (v.is<const char*>()) {
+          String item = v.as<const char*>();
+          if (isIceWord(item))    g_needIce = true;
+          if (isPearlWord(item))  g_needPearls = true;
+        }
+      }
+    }
+
+    // sweetness
+    if (ord["sweetness"].is<int>()) {
+      g_sweetness = ord["sweetness"].as<int>();
+    }
+  }
+
+  // เก็บไว้ใช้ทั่วฟังก์ชัน brew()
+  g_orderId = orderId;
+
+  // Debug
+  Serial.printf("[sim] parsed: orderId=%s, queue=%d, needIce=%d, needPearls=%d, sweetness=%d%%, brew=%lums\n",
+    g_orderId.c_str(), queuePos, (int)g_needIce, (int)g_needPearls, g_sweetness, brewMsFromSweetness(g_sweetness));
+
   return true;
 }
 
@@ -222,7 +278,7 @@ float readUltrasonicAverageCm(int trigPin, int echoPin, int samples = 5, int gap
 }
 
 bool ultrasonicTriggered(int trigPin, int echoPin, float thresholdCm) {
-  float cm = readUltrasonicCm(trigPin, echoPin);
+  float cm = readUltrasonicCm(int(trigPin), int(echoPin));
   if (isnan(cm)) return false;
   return (cm <= thresholdCm);
 }
@@ -332,7 +388,7 @@ void iceDetachIdle() {
 }
 
 /* =======================
- *  Helper: รอเซนเซอร์เป้าหมาย + เพิ่ม timeout
+ *  Helper: รอเซนเซอร์เป้าหมาย + timeout
  * =======================*/
 bool waitForSensorHitSequence(const String& orderId,
                               int targetSensor,
@@ -345,7 +401,6 @@ bool waitForSensorHitSequence(const String& orderId,
   unsigned long tStart = millis();
 
   while (true) {
-    // timeout กันหมุนยาว
     if (millis() - tStart > FIND_TIMEOUT_MS) {
       Serial.printf("[seq] Timeout waiting S%d → STOP\n", targetSensor);
       servoStop();
@@ -355,9 +410,7 @@ bool waitForSensorHitSequence(const String& orderId,
     int w = whichSensor();
     if (w == targetSensor) {
       unsigned long pressedAt = millis();
-      while ( (whichSensor() == targetSensor) && (millis() - pressedAt < TCRT_DEBOUNCE_MS) ) {
-        delay(1);
-      }
+      while ((whichSensor() == targetSensor) && (millis() - pressedAt < TCRT_DEBOUNCE_MS)) { delay(1); }
       if (millis() - pressedAt >= TCRT_DEBOUNCE_MS) {
         if (skipOnly) {
           Serial.printf("[seq] S%d hit → SKIP (keep spinning)\n", targetSensor);
@@ -369,7 +422,7 @@ bool waitForSensorHitSequence(const String& orderId,
                                      String(reportStep) + " (sensor S" + targetSensor + ")",
                                      true, "marker_hit", targetSensor);
 
-          // S3 → topping servo 0°→45°→0° (0.3s) (GPIO2)
+          // S3 → topping servo 0°→45°→0°
           if (targetSensor == 3 && reportStep && String(reportStep) == "adding_toppings") {
             toppingAttachNeutral();
             toppingServo.write(TOPPING_MAX_DEG);
@@ -379,7 +432,7 @@ bool waitForSensorHitSequence(const String& orderId,
             toppingDetachIdle();
           }
 
-          // S4 → ice servo @ G15: ทำ 3 ครั้ง 0°→45°→0°
+          // S4 → ice servo 0°↔45° จำนวน 3 ครั้ง
           if (targetSensor == 4 && reportStep && String(reportStep) == "adding_ice") {
             iceAttachNeutral();
             for (int i = 0; i < ICE_REPEAT_TIMES; ++i) {
@@ -391,14 +444,21 @@ bool waitForSensorHitSequence(const String& orderId,
             iceDetachIdle();
           }
 
-          // S1 → brewing_drink: ดึง G33 = LOW 5 วิ แล้วคืน HIGH
+          // S1 → เติมน้ำเชื่อม/น้ำตามความหวาน
           if (targetSensor == 1 && reportStep && String(reportStep) == "brewing_drink") {
-            digitalWrite(BREW_CTRL_PIN, BREW_ACTIVE_LEVEL);        // LOW
-            delay(BREW_PULSE_MS);                                  // 5s
-            digitalWrite(BREW_CTRL_PIN, !BREW_ACTIVE_LEVEL);       // HIGH
+            unsigned long brewMs = brewMsFromSweetness(g_sweetness);
+            if (brewMs > 0) {
+              Serial.printf("[brew] sweetness=%d%% → pulse=%lums\n", g_sweetness, brewMs);
+              digitalWrite(BREW_CTRL_PIN, BREW_ACTIVE_LEVEL);        // ACTIVE (LOW)
+              delay(brewMs);
+              digitalWrite(BREW_CTRL_PIN, !BREW_ACTIVE_LEVEL);       // INACTIVE (HIGH)
+            } else {
+              // สำคัญ: sweetness = 0 → ไม่ชักพินเลย (กันไมโครพัลส์)
+              Serial.println("[brew] sweetness=0% → skip syrup (no pulse)");
+            }
           }
 
-          delay(stopMs);
+          if (stopMs > 0) delay(stopMs);
           servoCCW();
           return true;
         }
@@ -447,7 +507,6 @@ bool gotoAndPrepareAtS2(const String& orderId) {
   unsigned long tLastLog = 0;
   unsigned long tStart = millis();
 
-  // หมุนหา S2 (มี timeout กันหมุนยาว)
   while (true) {
     if (millis() - tStart > FIND_TIMEOUT_MS) {
       Serial.println("[prep] Timeout seeking S2 → STOP");
@@ -488,7 +547,6 @@ bool gotoAndPrepareAtS2(const String& orderId) {
   while (true) {
     float nowAvg = readUltrasonicAverageCm(ULTRA2_TRIG, ULTRA2_ECHO, 4, 25);
 
-    // ยังไม่มีแก้ว → ค่อย ๆ ไป 180° แล้วเขย่า
     if (isnan(nowAvg) || nowAvg >= PREP_NEAR_CM) {
       if (prep_pos < 180) {
         prep_pos += prep_stepSize;
@@ -514,7 +572,6 @@ bool gotoAndPrepareAtS2(const String& orderId) {
                       PREP_NEAR_CM, prep_pos);
       }
     } else {
-      // มีแก้ว → คอนเฟิร์ม 2 วิ
       Serial.printf("[prep] near %.1f cm detected → confirming...\n", nowAvg);
       delay(PREP_CONFIRM_MS);
       float confirm = readUltrasonicAverageCm(ULTRA2_TRIG, ULTRA2_ECHO, 4, 25);
@@ -541,7 +598,7 @@ void waitForPickupAfterBrew(const String& orderId, float pickupDeltaCm = 4.0f) {
   servoStop();
   Serial.println("[pickup] Measuring baseline on ULTRA1]...");
   float baseline = NAN;
-  for (int attempt = 0; attempt < 3 && isnan(baseline); ++attempt) {
+  for (int attempt = 0; int(attempt) < 3 && isnan(baseline); ++attempt) {
     baseline = readUltrasonicAverageCm(ULTRA1_TRIG, ULTRA1_ECHO, 8, 35);
   }
   if (isnan(baseline)) baseline = readUltrasonicCm(ULTRA1_TRIG, ULTRA1_ECHO);
@@ -579,13 +636,12 @@ void waitForPickupAfterBrew(const String& orderId, float pickupDeltaCm = 4.0f) {
 }
 
 /* =======================
- *  Brew sequence
+ *  Brew sequence (ตามกติกาใหม่)
  * =======================*/
 void brew(const String& orderId) {
   const unsigned long HOLD_MS = 2000;
 
-  // เริ่ม
-  (void)postProgressExtended(orderId, "start", "in_progress", "เริ่มต้น", false, "step_started", 0);
+  // 🛑 ไม่ส่ง step="start" เพื่อเลี่ยง 400
 
   // --- เช็ค ULTRA1 ตอนเริ่ม: ถ้าใกล้มาก (<30cm) ข้าม S1 ---
   float us1Start = readUltrasonicAverageCm(ULTRA1_TRIG, ULTRA1_ECHO, 3, 25);
@@ -609,14 +665,22 @@ void brew(const String& orderId) {
     }
   }
 
-  // S3 → หยุด + adding_toppings (GPIO2: attach→45°(0.3s)→0°→detach)
-  waitForSensorHitSequence(orderId, 3, HOLD_MS, "adding_toppings", false);
+  // ===== ลอจิกตามท็อปปิ้ง =====
+  // มีทั้งน้ำแข็งและไข่มุก → S2 (ทำแล้ว) → S3 → S4 → S1
+  if (g_needIce && g_needPearls) {
+    waitForSensorHitSequence(orderId, 3, HOLD_MS, "adding_toppings", false); // S3 ก่อน
+    waitForSensorHitSequence(orderId, 4, HOLD_MS, "adding_ice", false);      // แล้ว S4
+  } else if (g_needPearls) {
+    waitForSensorHitSequence(orderId, 3, HOLD_MS, "adding_toppings", false);
+  } else if (g_needIce) {
+    waitForSensorHitSequence(orderId, 4, HOLD_MS, "adding_ice", false);
+  } else {
+    Serial.println("[logic] No ice & no pearls → skip S3/S4");
+  }
 
-  // S4 → หยุด + adding_ice (GPIO15: แกว่ง 0↔45 จำนวน 3 ครั้ง แล้ว detach)
-  waitForSensorHitSequence(orderId, 4, HOLD_MS, "adding_ice", false);
-
-  // S1 → หยุด + brewing_drink (G33 = LOW 5 วิ)
-  waitForSensorHitSequence(orderId, 1, HOLD_MS, "brewing_drink", false);
+  // เติมน้ำเชื่อม/น้ำ (brewing_drink @ S1) — ถ้า sweetness=0 ให้ “ไม่ชักพิน” และไม่หน่วง
+  unsigned long holdAfterBrew = (brewMsFromSweetness(g_sweetness) > 0) ? HOLD_MS : 0;
+  waitForSensorHitSequence(orderId, 1, holdAfterBrew, "brewing_drink", false);
 
   // รอให้ลูกค้ายกแก้ว (ULTRA1 เพิ่ม ≥ 4 ซม.) → completed
   waitForPickupAfterBrew(orderId, 4.0f);
